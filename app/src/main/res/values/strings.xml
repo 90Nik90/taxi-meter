@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Таксометр</string>
+    <string name="channel_name">Поїздка</string>
+    <string name="channel_desc">Показує активну поїздку таксометра</string>
+</resources>

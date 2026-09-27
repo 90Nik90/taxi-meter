@@ -1,0 +1,1899 @@
+<title>Таксометр Sonata</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+
+    /* Фон страницы вокруг телефона */
+    --page-bg: #ecebe6;
+
+    /* Экран устройства: значения один-в-один из ui/theme/Theme.kt */
+    --m-bg: #101418;
+    --m-surface: #1b222b;
+    --m-variant: #243040;
+    --m-on: #e6eaf0;
+    --m-dim: #b4bfce;
+    --m-outline: #3a4757;
+    --m-accent: #ffd426;
+    --m-go: #2ecc71;
+    --m-wait: #ffa726;
+    --m-stop: #e74c3c;
+    --m-gray: #6b7889;
+    /* Безналичная оплата: отделяет карту от жёлтого фирменного цвета */
+    --m-card: #3f9bf0;
+
+    --shell: #04060a;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page-bg: #14181d;
+      --shell: #000000;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page-bg: #14181d;
+    --shell: #000000;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--m-on);
+    font-family: Roboto, "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    padding-inline: 16px;
+    padding-block: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ─── Корпус телефона ────────────────────────────────────────── */
+
+  .phone {
+    width: 100%;
+    max-width: 392px;
+    background: var(--shell);
+    border-radius: 34px;
+    padding: 9px;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .32), 0 1px 0 rgba(255, 255, 255, .06) inset;
+  }
+
+  .screen {
+    background: var(--m-bg);
+    color: var(--m-on);
+    border-radius: 26px;
+    overflow: hidden;
+    height: min(748px, calc(100dvh - 58px));
+    min-height: 560px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 18px 3px;
+    font-family: "Roboto Mono", monospace;
+    font-size: 11px;
+    color: var(--m-dim);
+    flex: none;
+  }
+
+  .appbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px 4px 8px;
+    flex: none;
+  }
+
+  .appbar .t {
+    flex: 1;
+    font-size: 20px;
+    font-weight: 500;
+    padding-left: 8px;
+  }
+
+  .iconbtn {
+    width: 44px;
+    height: 44px;
+    border: 0;
+    background: none;
+    border-radius: 50%;
+    color: var(--m-on);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    flex: none;
+    padding: 0;
+  }
+
+  .iconbtn:hover { background: rgba(255, 255, 255, .07); }
+  .iconbtn:focus-visible { outline: 2px solid var(--m-accent); outline-offset: -3px; }
+  .iconbtn svg { width: 22px; height: 22px; fill: currentColor; }
+
+  .body-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 16px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scrollbar-width: thin;
+  }
+
+  .card {
+    background: var(--m-surface);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Вся карточка профиля — кнопка выбора тарифа */
+  .card.tap { cursor: pointer; border: 1px solid var(--m-outline); }
+  .card.tap:hover { background: #1f2731; border-color: var(--m-dim); }
+  .card.tap:active { background: #263040; }
+  .card.tap.sel { border-color: var(--m-go); }
+
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row.between { justify-content: space-between; }
+  .grow { flex: 1; min-width: 0; }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+  .label {
+    font-size: 11px;
+    letter-spacing: .09em;
+    color: var(--m-dim);
+    font-weight: 700;
+  }
+
+  .small { font-size: 12px; color: var(--m-dim); }
+  .mono { font-family: "Roboto Mono", monospace; font-variant-numeric: tabular-nums; }
+
+  .kv {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 14px;
+  }
+
+  .kv span:first-child { color: var(--m-dim); }
+  .kv span:last-child { font-family: "Roboto Mono", monospace; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  /* Поле-селектор профиля: имитация OutlinedTextField */
+
+  /* Тариф меняется только на экране профилей, здесь он просто назван */
+  .profile-name {
+    text-align: center;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--m-dim);
+    padding-top: 4px;
+  }
+
+  .odometer { text-align: center; }
+
+  .odometer .big {
+    font-family: "Roboto Mono", monospace;
+    font-weight: 700;
+    font-size: 58px;
+    line-height: 1;
+    color: var(--m-accent);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .odometer .unit { color: var(--m-dim); font-size: 16px; margin-left: 8px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* Дополнительные услуги: галочку поставить — убрать */
+  .service {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 7px 0;
+    cursor: pointer;
+    font-size: 16px;
+  }
+
+  .service:hover .checkbox { border-color: var(--m-dim); }
+
+  .checkbox {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 2px solid var(--m-dim);
+    flex: none;
+    display: grid;
+    place-items: center;
+    transition: background .12s, border-color .12s;
+  }
+
+  .checkbox.on { background: var(--m-accent); border-color: var(--m-accent); }
+  .checkbox svg { width: 16px; height: 16px; fill: #101418; }
+
+  .tile {
+    background: var(--m-variant);
+    border-radius: 12px;
+    padding: 10px 6px;
+    text-align: center;
+  }
+
+  .tile .v {
+    font-family: "Roboto Mono", monospace;
+    font-weight: 700;
+    font-size: 19px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .controls { display: flex; gap: 12px; padding: 16px; flex: none; }
+
+  .bigbtn {
+    flex: 1;
+    height: 64px;
+    border: 0;
+    border-radius: 18px;
+    font-family: Roboto, sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: .02em;
+    color: #101418;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .bigbtn svg { width: 24px; height: 24px; fill: currentColor; }
+  .bigbtn:active { transform: translateY(1px); }
+  .bigbtn:focus-visible { outline: 3px solid var(--m-on); outline-offset: 2px; }
+
+  /* Статистика */
+  .seg {
+    display: flex;
+    border: 1px solid var(--m-outline);
+    border-radius: 20px;
+    overflow: hidden;
+    flex: none;
+  }
+
+  .seg button {
+    flex: 1;
+    border: 0;
+    border-left: 1px solid var(--m-outline);
+    background: none;
+    color: var(--m-dim);
+    font-family: Roboto, sans-serif;
+    font-size: 13px;
+    padding: 9px 4px;
+    cursor: pointer;
+  }
+
+  .seg button:first-child { border-left: 0; }
+  .seg button.on { background: var(--m-variant); color: var(--m-on); font-weight: 700; }
+  .seg button:hover:not(.on) { color: var(--m-on); }
+
+  /* Кольцо долей оплаты */
+  .donut-wrap { display: grid; gap: 14px; justify-items: center; padding-top: 4px; }
+  .donut { width: 148px; height: 148px; transform: rotate(-90deg); }
+  .donut circle { fill: none; stroke-width: 6.5; }
+  .donut .seg { stroke-linecap: butt; }
+
+  .legend-list { display: grid; gap: 8px; width: 100%; }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+  }
+
+  .lg-pct { font-size: 12px; color: var(--m-dim); }
+
+  .lg-leader {
+    flex: 1;
+    border-bottom: 1px dotted var(--m-outline);
+    height: 1px;
+    margin: 0 2px;
+  }
+
+  .lg-val { font-weight: 700; }
+
+  .chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 110px;
+  }
+
+  .bar-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .bar { width: 100%; border-radius: 3px 3px 0 0; }
+
+  .bar-label {
+    font-size: 9px;
+    color: var(--m-dim);
+    padding-top: 4px;
+    white-space: nowrap;
+  }
+
+  /* Кнопка сохранения: обычной высоты и спокойного цвета.
+     Отдельный класс нужен, чтобы не наследовать flex:1 у .bigbtn —
+     в колоночном flex она растягивалась на весь остаток экрана. */
+  .savebtn {
+    flex: none;
+    height: 52px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--m-variant);
+    color: var(--m-on);
+    font-family: Roboto, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .savebtn:hover { background: #2c3849; }
+  .savebtn:active { transform: translateY(1px); }
+
+  /* Полоса о потере связи над счётчиком */
+  .warnbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 16px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    /* Подложка того же тона, что текст, но почти прозрачная */
+    background: rgba(255, 255, 255, .07);
+    background: color-mix(in srgb, currentColor 16%, transparent);
+    font-size: 12px;
+    flex: none;
+  }
+
+  .warnbar svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
+
+  .trashbtn { width: 32px; height: 32px; color: var(--m-stop); flex: none; }
+  .trashbtn svg { width: 18px; height: 18px; }
+
+  .tiles.tiles3 { grid-template-columns: repeat(3, 1fr); }
+  .tiles3 .tile .v { font-size: 17px; }
+  .tiles3 .tile .label { font-size: 9px; }
+
+  /* Головне меню */
+  .tripbtn { height: 120px; font-size: 22px; border-radius: 22px; }
+  .tripbtn > svg { width: 34px; height: 34px; }
+  .tripbtn.stacked { display: block; padding: 20px 16px; height: auto; }
+
+  /* Состояние сверху, отступ, затем значения столбиком; все строки одного размера */
+  .triplabel {
+    display: grid;
+    gap: 24px;
+    justify-items: center;
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .tl-state { letter-spacing: .04em; }
+
+  .startlabel {
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+    width: 100%;
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  /* Две трети ширины кнопки; пропорции силуэта 2:1.
+     Селектор из двух классов нужен, чтобы перебить `.tripbtn > svg`. */
+  .startlabel .carico {
+    width: 67%;
+    height: auto;
+    fill: currentColor;
+    display: block;
+  }
+
+  .triplabel .carico {
+    width: 50%;
+    height: auto;
+    fill: currentColor;
+    display: block;
+  }
+
+  /* Детали машинки */
+  .carico .road {
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-dasharray: 6 5;
+    opacity: .5;
+  }
+
+  .carico .tyre { fill: none; stroke: currentColor; stroke-width: 2.6; }
+  .carico .spokes { fill: none; stroke: currentColor; stroke-width: .9; stroke-linecap: round; }
+  .carico .hub { fill: currentColor; }
+
+  /* Холостая анимация задаётся из tick() атрибутом transform:
+     так она не зависит от transform-box и системных настроек CSS. */
+
+  .menubtn {
+    width: 100%;
+    height: 64px;
+    border: 1px solid var(--m-outline);
+    border-radius: 18px;
+    background: none;
+    color: var(--m-on);
+    font-family: Roboto, sans-serif;
+    font-size: 17px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .menubtn:hover { border-color: var(--m-dim); background: rgba(255, 255, 255, .04); }
+  .menubtn svg { width: 22px; height: 22px; fill: currentColor; }
+
+  .fab {
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    border: 0;
+    background: var(--m-accent);
+    color: #101418;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, .4);
+  }
+
+  .fab svg { width: 24px; height: 24px; fill: currentColor; }
+
+  .textbtn {
+    background: none;
+    border: 0;
+    color: var(--m-accent);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .textbtn:hover { background: rgba(255, 212, 38, .1); }
+
+  .outbtn {
+    background: none;
+    border: 1px solid var(--m-outline);
+    color: var(--m-on);
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .outbtn:hover { border-color: var(--m-dim); }
+
+  .minput {
+    width: 100%;
+    background: none;
+    border: 1px solid var(--m-outline);
+    border-radius: 6px;
+    color: var(--m-on);
+    font-family: "Roboto Mono", monospace;
+    font-size: 16px;
+    padding: 12px 14px;
+  }
+
+  .minput:focus { outline: none; border-color: var(--m-accent); }
+  .mfield { position: relative; }
+
+  .mfield .flabel {
+    position: absolute;
+    top: -8px;
+    left: 11px;
+    background: var(--m-bg);
+    padding: 0 5px;
+    font-size: 11px;
+    color: var(--m-dim);
+    pointer-events: none;
+  }
+
+  .devrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    cursor: pointer;
+    border-top: 1px solid var(--m-outline);
+  }
+
+  .devrow:first-of-type { border-top: 0; }
+
+  /* AlertDialog подтверждения — как в ProfilesScreen.kt */
+  .scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .62);
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    z-index: 5;
+  }
+
+  .dialog {
+    background: #232b36;
+    border-radius: 28px;
+    padding: 24px;
+    width: 100%;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dialog h3 { margin: 0; font-size: 22px; font-weight: 400; color: var(--m-on); }
+  .dialog .dtext { font-size: 14px; color: var(--m-dim); }
+  .dialog .dactions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 10px; }
+  .dialog .dactions.center { justify-content: center; }
+  .dialog.wide { max-width: 320px; }
+  .dialog .dicon { display: grid; place-items: center; }
+  .dialog .dicon svg { width: 26px; height: 26px; fill: var(--m-go); }
+  .dialog h3.center { text-align: center; }
+  hr { border: 0; border-top: 1px solid var(--m-outline); margin: 2px 0; width: 100%; }
+
+  .dtotal {
+    text-align: center;
+    font-family: "Roboto Mono", monospace;
+    font-weight: 700;
+    font-size: 38px;
+    line-height: 1.1;
+    color: var(--m-accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dtotal .cur { font-family: Roboto, sans-serif; font-size: 14px; font-weight: 400; color: var(--m-dim); margin-left: 6px; }
+
+  .toast {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 92px;
+    background: #e6eaf0;
+    color: #14181d;
+    border-radius: 6px;
+    padding: 13px 16px;
+    font-size: 14px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="phone">
+  <div class="screen" id="screen">
+    <div class="statusbar">
+      <span id="sbClock">14:32</span>
+      <span>▮▮▮ 78%</span>
+    </div>
+    <div id="screenBody" style="flex:1;display:flex;flex-direction:column;min-height:0"></div>
+    <div id="dialogHost"></div>
+    <div id="toast" class="toast" hidden></div>
+  </div>
+</div>
+
+<script>
+  "use strict";
+
+  /* ═══ Иконки Material, те же, что в приложении ═══ */
+  const ICON = {
+    tag: 'M21.41,11.58l-9,-9C12.05,2.22 11.55,2 11,2H4c-1.1,0 -2,0.9 -2,2v7c0,0.55 0.22,1.05 0.59,1.42l9,9c0.36,0.36 0.86,0.58 1.41,0.58s1.05,-0.22 1.41,-0.59l7,-7c0.37,-0.36 0.59,-0.86 0.59,-1.41s-0.23,-1.06 -0.59,-1.42zM5.5,7C4.67,7 4,6.33 4,5.5S4.67,4 5.5,4 7,4.67 7,5.5 6.33,7 5.5,7z',
+    play: 'M8 5v14l11-7z',
+    pause: 'M6 19h4V5H6v14zm8-14v14h4V5h-4z',
+    stop: 'M6 6h12v12H6z',
+    refresh: 'M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z',
+    back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z',
+    add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
+    del: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
+    check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+    checkCircle: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
+    menu: 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z',
+    warning: 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z',
+    chart: 'M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z',
+    settings: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z'
+  };
+  /* res/drawable/ic_car.xml — силуэт седана сбоку.
+     Один контур с fill-rule="evenodd": вложенные подконтуры становятся
+     дырами, сквозь них видно фон кнопки — стёкла, зазор двери, ручки,
+     фонари и диски колёс. */
+  const carSvg = () => `<svg class="carico" viewBox="0 0 64 32" aria-hidden="true">
+    <g transform="translate(64 0) scale(-1 1)">
+    <line class="road" id="carRoad" x1="1" y1="29.6" x2="63" y2="29.6"/>
+    <g class="carbody" id="carBody"><path fill-rule="evenodd" d="
+      M2.6,21.5 L2.6,17.8 C2.6,16.4 3.4,15.4 4.8,15.0 L17.0,11.6
+      C19.4,8.6 22.6,7.0 26.4,7.0 L37.6,7.0 C41.4,7.0 44.6,8.6 47.0,11.6
+      L59.2,15.0 C60.6,15.4 61.4,16.4 61.4,17.8 L61.4,21.5
+      L54.5,21.5 A6.5,6.5 0 0,0 41.5,21.5 L22.5,21.5
+      A6.5,6.5 0 0,0 9.5,21.5 Z
+
+      M31.4,8.9 L26.0,8.9 L22.6,13.8 L31.4,13.8 Z
+      M32.6,8.9 L38.0,8.9 L41.4,13.8 L32.6,13.8 Z
+
+      M31.6,15.0 L32.4,15.0 L32.4,20.6 L31.6,20.6 Z
+
+      M26.6,16.0 L29.8,16.0 L29.8,17.1 L26.6,17.1 Z
+      M34.2,16.0 L37.4,16.0 L37.4,17.1 L34.2,17.1 Z
+
+      M4.6,18.4 L7.6,18.4 L7.6,19.9 L4.6,19.9 Z
+      M56.4,18.4 L59.4,18.4 L59.4,19.9 L56.4,19.9 Z
+
+      M28.4,3.0 L35.6,3.0 A0.8,0.8 0 0,1 36.4,3.8 L36.4,7.0
+      L27.6,7.0 L27.6,3.8 A0.8,0.8 0 0,1 28.4,3.0 Z
+      M30.15,3.7 L32.0,3.7 L32.0,5.1 L30.15,5.1 Z
+      M33.85,3.7 L35.7,3.7 L35.7,5.1 L33.85,5.1 Z
+      M28.3,5.1 L30.15,5.1 L30.15,6.5 L28.3,6.5 Z
+      M32.0,5.1 L33.85,5.1 L33.85,6.5 L32.0,6.5 Z
+      "/></g>
+
+    <g class="wheel" id="carW1">
+      <circle class="tyre" cx="16" cy="21.5" r="4.2"/>
+      <path class="spokes" d="M17.00,21.50 L18.70,21.50 M16.31,22.45 L16.83,24.07
+        M15.19,22.09 L13.82,23.09 M15.19,20.91 L13.82,19.91 M16.31,20.55 L16.83,18.93"/>
+      <circle class="hub" cx="16" cy="21.5" r="1.05"/>
+    </g>
+    <g class="wheel" id="carW2">
+      <circle class="tyre" cx="48" cy="21.5" r="4.2"/>
+      <path class="spokes" d="M49.00,21.50 L50.70,21.50 M48.31,22.45 L48.83,24.07
+        M47.19,22.09 L45.82,23.09 M47.19,20.91 L45.82,19.91 M48.31,20.55 L48.83,18.93"/>
+      <circle class="hub" cx="48" cy="21.5" r="1.05"/>
+    </g>
+    </g>
+  </svg>`;
+
+  const svg = (name, cls) =>
+    `<svg viewBox="0 0 24 24"${cls ? ` class="${cls}"` : ''} aria-hidden="true"><path d="${ICON[name]}"/></svg>`;
+
+  /* ═══ Хранилище ═══ */
+  const LS = 'taxi-proto-v1';
+  const defaults = () => ([
+    { id: 'p1', name: 'Місто', pricePerKm: 15, pricePerIdleMinute: 2, minPrice: 60, minDistanceKm: 2 },
+    { id: 'p2', name: 'Нічний', pricePerKm: 20, pricePerIdleMinute: 3, minPrice: 90, minDistanceKm: 2 }
+  ]);
+
+  /* data/Profile.kt → ExtraService; цены общие для всех тарифов */
+  const SERVICES = [
+    { key: 'CHILDREN', title: 'Діти', field: 'children' },
+    { key: 'PETS', title: 'Тварини', field: 'pets' },
+    { key: 'LUGGAGE', title: 'Багаж у салоні', field: 'luggage' }
+  ];
+
+  const defaultServicePrices = () => ({ children: 20, pets: 30, luggage: 20 });
+
+  /** Подпись способа оплаты: в записи хранится ключ, а не текст. */
+  const paymentTitle = t => (PAYMENTS.find(x => x.key === t.payment) || {}).title || '';
+
+  /* data/Shift.kt → PaymentMethod */
+  const PAYMENTS = [
+    { key: 'CASH', title: 'Готівка' },
+    { key: 'CARD', title: 'Картка' }
+  ];
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(LS);
+      if (!raw) return null;
+      const v = JSON.parse(raw);
+      if (!v || !Array.isArray(v.profiles) || !v.profiles.length) return null;
+      // Сохранения до выноса услуг в общие настройки
+      if (!v.servicePrices) v.servicePrices = defaultServicePrices();
+      SERVICES.forEach(s => {
+        if (typeof v.servicePrices[s.field] !== 'number') v.servicePrices[s.field] = 0;
+      });
+      return v;
+    } catch (e) { return null; }
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(LS, JSON.stringify({
+        v: 5,
+        profiles: S.profiles,
+        activeId: S.activeId,
+        calibration: S.calibration,
+        servicePrices: S.servicePrices,
+        trips: S.trips
+      }));
+    } catch (e) { /* приватное окно — работаем без сохранения */ }
+  }
+
+  /** Сколько поездок выброшено чисткой при загрузке. */
+  let removedUnpaid = 0;
+
+  /**
+   * Поездки из хранилища; сохранения со сменами разворачиваем в плоский
+   * список. Записи без способа оплаты остались от версий, где его ещё
+   * не спрашивали — они ломали разбивку по оплате, поэтому выбрасываются.
+   */
+  function loadTrips(v) {
+    if (!v) return [];
+    let all = [];
+    if (Array.isArray(v.trips)) {
+      all = v.trips;
+    } else if (Array.isArray(v.shifts)) {
+      all = v.shifts
+        .flatMap(sh => sh.trips || [])
+        .sort((a, b) => b.finishedAtWallMs - a.finishedAtWallMs);
+    }
+    // Старые записи хранили подпись способа оплаты, а не ключ
+    const migrated = all.map(t => {
+      if (t.payment === 'Наличные' || t.payment === 'Готівка') return { ...t, payment: 'CASH' };
+      if (t.payment === 'Карта' || t.payment === 'Картка') return { ...t, payment: 'CARD' };
+      return t;
+    });
+    const kept = migrated.filter(t => t.payment);
+    removedUnpaid = all.length - kept.length;
+    return kept;
+  }
+
+  const stored = load();
+
+  const S = {
+    /* Стек экранов: «назад» всегда возвращает туда, откуда пришли */
+    stack: ['menu'],
+    /* Все завершённые поездки, новые первыми */
+    trips: loadTrips(stored),
+    conn: 'DEMO',
+    devName: 'Демо-режим',
+    protocol: 'Імітація',
+    demo: true,
+    selectedAddr: null,
+    speed: 0, rpm: null, volt: null, distClear: null, hz: 0,
+    trip: { state: 'IDLE', rawKm: 0, runningMs: 0, idleMs: 0, startedAtWallMs: 0, finishedAtWallMs: 0 },
+    profiles: stored ? stored.profiles : defaults(),
+    activeId: stored ? stored.activeId : 'p1',
+    calibration: stored ? stored.calibration : 1,
+    editing: null,
+    pendingDelete: null,
+    summaryVisible: false,
+    /* Способ оплаты выбирается в итоговом попапе */
+    payment: null,
+    paymentError: false,
+    /* Статистика: период, вибранийная смена, раскрытая поездка */
+    statsPeriod: 'DAY',
+    /* Поездка, для которой открыт вопрос об удалении */
+    pendingTripDelete: null,
+    expandedTrip: null,
+    /* Послуги живут между поездками и сбрасываются кнопкой «Новая поездка» */
+    services: [],
+    /* Доплати общие для всех тарифов */
+    servicePrices: stored ? stored.servicePrices : defaultServicePrices()
+  };
+
+  /* Имена профилей вводит пользователь — экранируем перед вставкой в разметку */
+  const esc = s => String(s === null || s === undefined ? '' : s).replace(
+    /[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+  );
+
+  const DEVICES = [
+    { name: 'OBDII', address: '00:1D:A5:68:98:8B' },
+    { name: 'ELM327-v1.5', address: '10:CD:B6:04:F1:2A' },
+    { name: 'Galaxy Buds3 Pro', address: 'E8:D0:3C:71:A9:04' }
+  ];
+
+  const screenName = () => S.stack[S.stack.length - 1];
+  const activeProfile = () => S.profiles.find(p => p.id === S.activeId) || S.profiles[0] || null;
+  const isLive = () => S.conn === 'CONNECTED' || S.conn === 'DEMO';
+  /* Менять тариф можно только когда поездки нет: на завершённой смена
+     профиля пересчитала бы уже показанную сумму. */
+  const canSelect = () => S.trip.state === 'IDLE';
+  const isActiveTrip = () => S.trip.state === 'RUNNING' || S.trip.state === 'PAUSED';
+
+  /* ═══ Арифметика — перенос из data/Profile.kt ═══ */
+  const round2 = v => Math.round(v * 100) / 100;
+  const fmt = (v, d) => (v === null || v === undefined || !isFinite(v) ? '—' : v.toFixed(d === undefined ? 2 : d));
+
+  /* Округление вверх с запасом на погрешность double: ровно 2.000000001 км,
+     набежавшие при интегрировании, не должны открывать третий километр. */
+  const ceilUnits = v => Math.max(0, Math.ceil(v - 1e-9));
+
+  function calculateFare(p, distanceKm, idleSeconds, services, servicePrices) {
+    if (!p) return null;
+    const km = Math.max(0, distanceKm);
+
+    // Каждая начатая минута простоя оплачивается целиком
+    const billedIdleMinutes = ceilUnits(Math.max(0, idleSeconds) / 60);
+    const idlePart = billedIdleMinutes * p.pricePerIdleMinute;
+
+    // Каждый начатый километр сверх минимального расстояния — целиком
+    const billedKm = ceilUnits(km - p.minDistanceKm);
+
+    // Доплати за послуги прибавляются к минимальной цене поездки
+    const prices = servicePrices || defaultServicePrices();
+    const servicesPart = (services || []).reduce((sum, key) => {
+      const s = SERVICES.find(x => x.key === key);
+      return sum + (s ? (prices[s.field] || 0) : 0);
+    }, 0);
+    const effectiveMinPrice = p.minPrice + servicesPart;
+
+    let distancePart, minApplied;
+    if (p.minDistanceKm > 0) {
+      distancePart = effectiveMinPrice + billedKm * p.pricePerKm;
+      minApplied = billedKm === 0;
+    } else {
+      const raw = billedKm * p.pricePerKm;
+      if (raw < effectiveMinPrice) { distancePart = effectiveMinPrice; minApplied = true; }
+      else { distancePart = raw; minApplied = false; }
+    }
+
+    return {
+      distanceKm: km, billedKm, billedIdleMinutes,
+      distancePart: round2(distancePart),
+      servicesPart: round2(servicesPart),
+      idlePart: round2(idlePart),
+      total: round2(distancePart + idlePart),
+      minPriceApplied: minApplied
+    };
+  }
+
+  /* meter/MeterService.kt → formatClock: момент по часам телефона */
+  function formatClock(epochMs) {
+    if (!epochMs || epochMs <= 0) return '—';
+    const d = new Date(epochMs);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  /* meter/MeterService.kt → formatDate */
+  const MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
+    'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
+  function formatDate(epochMs) {
+    if (!epochMs || epochMs <= 0) return '—';
+    const d = new Date(epochMs);
+    return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${formatClock(epochMs)}`;
+  }
+
+  /* data/Stats.kt — периоды и агрегаты */
+  const PERIODS = [
+    { key: 'DAY', title: 'День', hint: 'з початку доби', days: 1 },
+    { key: 'WEEK', title: 'Тиждень', hint: 'останні 7 днів', days: 7 },
+    { key: 'MONTH', title: 'Місяць', hint: 'останні 30 днів', days: 30 },
+    { key: 'ALL', title: 'Усе', hint: 'усі збережені поїздки', days: 0 }
+  ];
+  const WEEKDAYS = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+
+  const startOfDay = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const DAY_MS = 86400000;
+
+  function periodStartMs(periodKey, nowMs) {
+    const p = PERIODS.find(x => x.key === periodKey);
+    if (!p || p.days === 0) return 0;
+    return startOfDay(nowMs) - (p.days - 1) * DAY_MS;
+  }
+
+  function buildStats(periodKey, nowMs) {
+    const fromMs = periodStartMs(periodKey, nowMs);
+    const trips = S.trips.filter(t => t.finishedAtWallMs >= fromMs);
+
+    const sum = f => trips.reduce((a, t) => a + (f(t) || 0), 0);
+    const revenue = sum(t => t.total);
+    const cash = trips.filter(t => t.payment === 'CASH').reduce((a, t) => a + t.total, 0);
+    const card = trips.filter(t => t.payment === 'CARD').reduce((a, t) => a + t.total, 0);
+    const distanceKm = sum(t => t.distanceKm);
+    const drivingMs = sum(t => t.runningMs);
+    const idleMs = sum(t => t.idleMs);
+    const workMs = drivingMs + idleMs;
+
+    const byProfileMap = {};
+    const days = {};
+    trips.forEach(t => {
+      const name = t.profileName || 'Без тарифу';
+      byProfileMap[name] = byProfileMap[name] || { name, trips: 0, revenue: 0 };
+      byProfileMap[name].trips++;
+      byProfileMap[name].revenue += t.total;
+
+      days[startOfDay(t.finishedAtWallMs)] = true;
+    });
+    const daysWithTrips = Object.keys(days).length;
+
+    let buckets, bucketTitle = 'ВИТОРГ ПО ДНЯХ';
+    if (periodKey === 'DAY') {
+      // За день график не строим: внутри суток он мало что объясняет
+      buckets = [];
+      bucketTitle = '';
+    } else if (periodKey === 'ALL') {
+      buckets = allTimeBuckets(trips, nowMs);
+    } else {
+      const p = PERIODS.find(x => x.key === periodKey);
+      buckets = dailyBuckets(trips, fromMs, p.days, nowMs);
+    }
+
+    return {
+      trips: trips.slice().sort((a, b) => b.finishedAtWallMs - a.finishedAtWallMs),
+      tripCount: trips.length,
+      revenue, cash, card, distanceKm, drivingMs, idleMs, workMs, daysWithTrips,
+      // Выручка поездок без отметки об оплате: только у старых записей,
+      // сделанных до того, как способ оплаты стал обязательным
+      unpaid: Math.max(0, revenue - cash - card),
+      servicesTotal: sum(t => t.servicesTotal),
+      maxTrip: trips.reduce((a, t) => Math.max(a, t.total), 0),
+      minTrip: trips.length ? trips.reduce((a, t) => Math.min(a, t.total), Infinity) : 0,
+      averageCheck: trips.length ? revenue / trips.length : 0,
+      averageDistance: trips.length ? distanceKm / trips.length : 0,
+      averageTripMs: trips.length ? workMs / trips.length : 0,
+      revenuePerHour: workMs > 0 ? revenue / (workMs / 3600000) : 0,
+      revenuePerKm: distanceKm > 0 ? revenue / distanceKm : 0,
+      idleShare: workMs > 0 ? idleMs / workMs : 0,
+      tripsPerDay: daysWithTrips ? trips.length / daysWithTrips : 0,
+      revenuePerDay: daysWithTrips ? revenue / daysWithTrips : 0,
+      byProfile: Object.values(byProfileMap).sort((a, b) => b.revenue - a.revenue),
+      buckets, bucketTitle
+    };
+  }
+
+  /* Дневные столбики за days дней, начиная с fromMs */
+  function dailyBuckets(trips, fromMs, days, nowMs) {
+    const sums = new Array(days).fill(0);
+    trips.forEach(t => {
+      const i = Math.round((startOfDay(t.finishedAtWallMs) - fromMs) / DAY_MS);
+      if (i >= 0 && i < days) sums[i] += t.total;
+    });
+    const todayStart = startOfDay(nowMs);
+    const out = [];
+    for (let i = 0; i < days; i++) {
+      const dayStart = fromMs + i * DAY_MS;
+      const d = new Date(dayStart);
+      let label = '';
+      if (days <= 7) label = WEEKDAYS[d.getDay()];
+      else if (i % 5 === 0 || i === days - 1) label = String(d.getDate());
+      out.push({ label, value: sums[i], emphasized: startOfDay(dayStart) === todayStart });
+    }
+    return out;
+  }
+
+  /* Для «Усе» — от первой поездки до сегодня, но не больше 60 столбиков */
+  function allTimeBuckets(trips, nowMs) {
+    if (!trips.length) return [];
+    const firstDay = trips.reduce((a, t) => Math.min(a, startOfDay(t.finishedAtWallMs)), Infinity);
+    const span = Math.round((startOfDay(nowMs) - firstDay) / DAY_MS) + 1;
+    const days = Math.max(1, Math.min(60, span));
+    return dailyBuckets(trips, startOfDay(nowMs) - (days - 1) * DAY_MS, days, nowMs);
+  }
+
+  /* meter/MeterService.kt → formatDuration */
+  function formatDuration(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  const distanceKm = () => S.trip.rawKm * S.calibration;
+  const fare = () =>
+    calculateFare(activeProfile(), distanceKm(), S.trip.idleMs / 1000, S.services, S.servicePrices);
+
+  /* ═══ Модельные часы и цикл опроса ═══ */
+  const STEP = 60;          // шаг между выборками, мс (~16 Гц, как ELM327 по Bluetooth)
+  const MAX_GAP_MS = 3000;  // TripEngine.MAX_GAP_MS
+  let vt = 0, pending = 0, lastReal = performance.now();
+  let lastSpeed = null, lastSampleVt = 0, samplesInSec = 0, secAcc = 0;
+
+  /* obd/ObdManager.kt → demoLoop: постоянная скорость без остановок,
+     за минуту набегает ровно километр */
+  const DEMO_SPEED_KMH = 60;
+  function demoSpeed() { return DEMO_SPEED_KMH; }
+
+  /* meter/TripEngine.kt → onSpeedSample */
+  function onSpeedSample(speedKmh, atMs) {
+    if (S.trip.state !== 'RUNNING') { lastSpeed = null; lastSampleVt = atMs; return; }
+    const prev = lastSpeed, dt = atMs - lastSampleVt;
+    lastSpeed = speedKmh; lastSampleVt = atMs;
+    if (prev === null) return;
+    if (dt <= 0 || dt > MAX_GAP_MS) return;
+    S.trip.rawKm += (prev + speedKmh) / 2 * (dt / 3600000);
+  }
+
+  function tick(now) {
+    let dReal = now - lastReal;
+    lastReal = now;
+    if (dReal > 400) dReal = 400;            // вкладка была свёрнута
+    pending += dReal;
+    carT += dReal;                           // часы анимации машинки
+
+    let steps = 0;
+    while (pending >= STEP && steps < 100) {
+      pending -= STEP; steps++; vt += STEP;
+
+      if (isLive()) {
+        S.speed = demoSpeed(vt / 1000);
+        S.rpm = S.speed === 0 ? 750 : 900 + S.speed * 28;
+        S.volt = 14.1;
+        onSpeedSample(S.speed, vt);
+        samplesInSec++;
+      } else {
+        S.speed = 0; lastSpeed = null;
+      }
+
+      if (S.trip.state === 'RUNNING') S.trip.runningMs += STEP;
+      else if (S.trip.state === 'PAUSED') S.trip.idleMs += STEP;
+
+      secAcc += STEP;
+      if (secAcc >= 1000) { S.hz = samplesInSec * 1000 / secAcc; samplesInSec = 0; secAcc = 0; }
+    }
+
+    paintLive();
+    requestAnimationFrame(tick);
+  }
+
+  /* ═══ Действия ═══ */
+  let toastTimer = null;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+  }
+
+  const A = {
+    start() {
+      if (!activeProfile()) { toast('Створіть тарифний профіль'); return; }
+      if (!isLive()) { toast('Немає зв’язку з авто — підключіть адаптер'); return; }
+      S.trip = {
+        state: 'RUNNING', rawKm: 0, runningMs: 0, idleMs: 0,
+        startedAtWallMs: Date.now(), finishedAtWallMs: 0
+      };
+      lastSpeed = null; lastSampleVt = vt;
+      render();
+    },
+    pause() { if (S.trip.state === 'RUNNING') { S.trip.state = 'PAUSED'; lastSpeed = null; render(); } },
+    resume() { if (S.trip.state === 'PAUSED') { S.trip.state = 'RUNNING'; lastSpeed = null; render(); } },
+    stop() {
+      if (!isActiveTrip()) return;
+      S.trip.state = 'FINISHED';
+      S.trip.finishedAtWallMs = Date.now();
+      lastSpeed = null;
+      S.summaryVisible = true;
+      S.payment = null;
+      S.paymentError = false;
+      render();
+    },
+
+    selectPayment(key) {
+      S.payment = (S.payment === key) ? null : key;
+      S.paymentError = false;
+      render();
+    },
+
+    /* Завершити поїздку из попапа: записать в историю и обнулить счётчик */
+    finishTrip() {
+      if (!S.payment) { S.paymentError = true; render(); return; }
+      A.recordTrip(S.payment);
+      S.summaryVisible = false;
+      S.services = [];
+      S.trip = { state: 'IDLE', rawKm: 0, runningMs: 0, idleMs: 0, startedAtWallMs: 0, finishedAtWallMs: 0 };
+      // После расчёта — снова выбор тарифа под следующего клиента
+      S.stack = ['menu', 'meter', 'pickProfile'];
+      render();
+    },
+
+    /* Завершённая поездка уходит в историю для статистики */
+    recordTrip(paymentKey) {
+      const f = fare();
+      if (!f) return;
+      const p = activeProfile();
+      S.trips = [{
+        startedAtWallMs: S.trip.startedAtWallMs,
+        finishedAtWallMs: S.trip.finishedAtWallMs,
+        distanceKm: S.trip.rawKm * S.calibration,
+        runningMs: S.trip.runningMs,
+        idleMs: S.trip.idleMs,
+        total: f.total,
+        profileName: p ? p.name : '',
+        services: S.services.map(k => (SERVICES.find(s => s.key === k) || {}).title).filter(Boolean),
+        payment: paymentKey || '',
+        servicesTotal: f.servicesPart
+      }].concat(S.trips).slice(0, 500);
+      save();
+    },
+
+    /* Поездка начинается с выбора тарифа; «назад» отсюда — сразу таксометр
+       с тем тарифом, что был вибраний раньше. */
+    startTrip() {
+      S.stack = ["menu", "meter", "pickProfile"];
+      render();
+    },
+
+    askDeleteTrip(key) { S.pendingTripDelete = Number(key); render(); },
+    cancelDeleteTrip() { S.pendingTripDelete = null; render(); },
+
+    /* Убрать поездку из истории и из статистики */
+    confirmDeleteTrip() {
+      const key = S.pendingTripDelete;
+      S.pendingTripDelete = null;
+      S.trips = S.trips.filter(t => t.finishedAtWallMs !== key);
+      if (S.expandedTrip === key) S.expandedTrip = null;
+      save();
+      render();
+    },
+
+    toggleService(key) {
+      S.services = S.services.includes(key)
+        ? S.services.filter(k => k !== key)
+        : S.services.concat(key);
+      render();
+    },
+
+    go(next) { S.stack = S.stack.concat(next); render(); },
+    back() { if (S.stack.length > 1) S.stack = S.stack.slice(0, -1); render(); },
+
+    /* Вибір тарифу сразу возвращает к таксометру */
+    /* Вибір тарифу всегда приводит на таксометр, откуда бы ни зашли */
+    goMeter() {
+      const i = S.stack.indexOf('meter');
+      S.stack = i >= 0 ? S.stack.slice(0, i + 1) : ['menu', 'meter'];
+    },
+
+    selectProfile(id) { S.activeId = id; A.goMeter(); save(); render(); },
+
+    saveProfile(p) {
+      const i = S.profiles.findIndex(x => x.id === p.id);
+      if (i >= 0) S.profiles[i] = p; else S.profiles.push(p);
+      S.editing = null; if (S.stack.length > 1) S.stack = S.stack.slice(0, -1); save(); render();
+    },
+
+    askDelete(id) { S.pendingDelete = id; render(); },
+    cancelDelete() { S.pendingDelete = null; render(); },
+
+    confirmDelete() {
+      const id = S.pendingDelete;
+      S.pendingDelete = null;
+      S.profiles = S.profiles.filter(p => p.id !== id);
+      if (!S.profiles.length) S.profiles = defaults();
+      if (!S.profiles.some(p => p.id === S.activeId)) S.activeId = S.profiles[0].id;
+      save(); render();
+    },
+
+    connect(dev) {
+      S.demo = false; S.selectedAddr = dev.address; S.devName = dev.name;
+      S.conn = 'CONNECTING'; S.protocol = null; render();
+      setTimeout(() => {
+        S.conn = 'CONNECTED';
+        S.protocol = 'ISO 15765-4 (CAN 11/500)';
+        S.distClear = 48213;
+        render();
+      }, 1400);
+    },
+
+    disconnect() {
+      S.conn = 'DISCONNECTED'; S.demo = false; S.protocol = null;
+      S.speed = 0; S.rpm = null; S.volt = null; S.hz = 0; lastSpeed = null;
+      render();
+    },
+  };
+
+  /**
+   * ui/AnimatedCar.kt — холостая анимация машинки.
+   * Кузов качается на подвеске, колёса крутятся, дорога бежит назад.
+   * При moving = false всё замирает.
+   */
+  let carT = 0;
+  const BOB_PERIOD = 900, SPIN_PERIOD = 1500, ROAD_PERIOD = 520, ROAD_CYCLE = 11;
+
+  function animateCar(moving) {
+    const body = document.getElementById('carBody');
+    if (!body) return;
+    const w1 = document.getElementById('carW1');
+    const w2 = document.getElementById('carW2');
+    const road = document.getElementById('carRoad');
+
+    const bob = moving ? Math.sin(carT / BOB_PERIOD * Math.PI * 2) * 0.8 : 0;
+    // Колёса и дорога крутятся в сторону движения — машина едет влево
+    const angle = moving ? -((carT / SPIN_PERIOD) * 360 % 360) : 0;
+    const dash = moving ? -((carT / ROAD_PERIOD) * ROAD_CYCLE % ROAD_CYCLE) : 0;
+
+    // Колёса приподнимаются слабее кузова — так виден ход подвески
+    const wheelBob = (bob * 0.3).toFixed(3);
+    body.setAttribute('transform', `translate(0 ${bob.toFixed(3)})`);
+    w1.setAttribute('transform', `translate(0 ${wheelBob}) rotate(${angle.toFixed(2)} 16 21.5)`);
+    w2.setAttribute("transform", `translate(0 ${wheelBob}) rotate(${angle.toFixed(2)} 48 21.5)`);
+    road.setAttribute('stroke-dashoffset', dash.toFixed(2));
+  }
+
+  /* ═══ Отрисовка ═══ */
+  const connColor = () => ({
+    CONNECTED: 'var(--m-go)', CONNECTING: 'var(--m-wait)', ERROR: 'var(--m-stop)',
+    DEMO: 'var(--m-accent)', DISCONNECTED: 'var(--m-gray)'
+  }[S.conn]);
+
+  function appbar(title, showBack, actions) {
+    return `<div class="appbar">
+      ${showBack ? `<button class="iconbtn" data-act="back" aria-label="Назад">${svg('back')}</button>` : ''}
+      <div class="t">${title}</div>${actions || ''}</div>`;
+  }
+
+  /* ui/MainMenuScreen.kt */
+  function menuScreen() {
+    const active = S.trip.state !== 'IDLE';
+    const f = fare();
+
+    const label = active
+      ? `<div class="triplabel">
+           ${carSvg()}
+           <div class="tl-state">${
+             S.trip.state === 'PAUSED' ? 'ПАУЗА · ПРОСТІЙ'
+               : (S.trip.state === 'FINISHED' ? 'ЗАВЕРШЕНА' : 'ПОЇЗДКА ТРИВАЄ')}</div>
+           <div class="mono" id="mSum">${fmt(f ? f.total : 0)} грн</div>
+           <div class="mono" id="mKm">${fmt(S.trip.rawKm * S.calibration)} км</div>
+           <div class="mono" id="mDur">${formatDuration(S.trip.runningMs + S.trip.idleMs)}</div>
+         </div>`
+      : `<div class="startlabel">
+           ${carSvg()}
+           <span>ПОЧАТИ ПОЇЗДКУ</span>
+         </div>`;
+
+    return `<div class="appbar"><div class="t"></div></div>`
+      + `<div class="body-scroll" style="gap:12px">
+        <button class="bigbtn tripbtn stacked"
+          style="background:${active ? 'var(--m-accent)' : 'var(--m-go)'}"
+          data-act="${active ? 'go' : 'startTrip'}" ${active ? 'data-arg="meter"' : ''}>
+          ${label}
+        </button>
+
+        <button class="menubtn" data-act="go" data-arg="statistics">
+          ${svg('chart')}<span>Статистика</span>
+        </button>
+        <button class="menubtn" data-act="go" data-arg="settings">
+          ${svg('settings')}<span>Налаштування</span>
+        </button>
+      </div>`;
+  }
+
+  /**
+   * ui/StatisticsScreen.kt → PaymentSplit.
+   * Кольцо долей оплаты и подписи с суммами под ним. Радиус 15.915
+   * даёт длину окружности ровно 100, поэтому доли задаются процентами.
+   */
+  function donut(st) {
+    // Доли считаются от оплаченного, а не от всей выручки: иначе поездки
+    // без отметки об оплате оставляли бы в кольце пустой сектор.
+    const base = st.cash + st.card;
+    if (base <= 0) return '';
+    const cash = st.cash / base * 100;
+    const card = 100 - cash;
+    const gap = (cash > 0 && card > 0) ? 1.2 : 0;
+
+    const seg = (percent, offset, color) => {
+      if (percent <= 0) return '';
+      const len = Math.max(0.4, percent - gap);
+      return `<circle class="seg" cx="21" cy="21" r="15.915" stroke="${color}"
+        stroke-dasharray="${len.toFixed(2)} ${(100 - len).toFixed(2)}"
+        stroke-dashoffset="${offset.toFixed(2)}"/>`;
+    };
+
+    const row = (color, name, percent, value) => `<div class="legend">
+      <span class="dot" style="background:${color}"></span>
+      <span class="lg-name">${name}</span>
+      <span class="lg-pct">${Math.round(percent)} %</span>
+      <span class="lg-leader"></span>
+      <span class="lg-val mono">${fmt(value)} грн</span>
+    </div>`;
+
+    return `<div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 42 42" aria-hidden="true">
+        ${seg(cash, 25 - gap / 2, 'var(--m-go)')}
+        ${seg(card, 25 - cash - gap / 2, 'var(--m-card)')}
+      </svg>
+      <div class="legend-list">
+        ${row('var(--m-go)', 'Готівка', cash, st.cash)}
+        ${row('var(--m-card)', 'Картка', card, st.card)}
+      </div>
+    </div>`;
+  }
+
+  /* ui/StatisticsScreen.kt */
+  function statisticsScreen() {
+    const now = Date.now();
+    const period = S.statsPeriod;
+    const st = buildStats(period, now);
+    const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+
+    const tabs = `<div class="seg">
+      ${PERIODS.map(p => `<button type="button" data-act="statsPeriod" data-arg="${p.key}"
+        class="${p.key === period ? 'on' : ''}">${p.title}</button>`).join('')}
+    </div>`;
+    const hint = (PERIODS.find(p => p.key === period) || {}).hint;
+
+    let body = '';
+
+    if (!st.tripCount) {
+      body = `<div class="card">
+        <div style="font-size:17px;font-weight:500">За період немає поїздок</div>
+        <div class="small">Завершіть першу поїздку — усе порахується само.</div>
+      </div>`;
+    } else {
+      body += `<div class="card">
+        <div class="dtotal" style="font-size:40px">${fmt(st.revenue)}<span class="cur">грн</span></div>
+        ${donut(st)}
+        <hr>
+        <div class="tiles">
+          <div class="tile"><div class="label">ПОЇЗДОК</div><div class="v">${st.tripCount}</div></div>
+          <div class="tile"><div class="label">КМ</div><div class="v">${fmt(st.distanceKm, 1)}</div></div>
+        </div>
+      </div>`;
+
+      if (st.byProfile.length > 1) {
+        body += `<div class="card">
+          <div class="label">ЗА ТАРИФАМИ</div>
+          ${st.byProfile.map(p =>
+            `<div class="kv"><span>${esc(p.name)} · ${p.trips}</span><span>${fmt(p.revenue)} грн</span></div>`
+          ).join('')}
+        </div>`;
+      }
+
+      const maxBucket = st.buckets.reduce((a, b) => Math.max(a, b.value), 0);
+      if (maxBucket > 0) {
+        body += `<div class="card">
+          <div class="row between">
+            <span class="label">${st.bucketTitle}</span>
+            <span class="label">макс. ${fmt(maxBucket)} грн</span>
+          </div>
+          <div class="chart">
+            ${st.buckets.map(b => {
+              const ratio = b.value / maxBucket;
+              const color = b.value <= 0 ? 'var(--m-variant)' : (b.emphasized ? 'var(--m-go)' : 'var(--m-accent)');
+              return `<div class="bar-col" title="${fmt(b.value)} грн">
+                <div class="bar" style="height:${2 + 84 * ratio}px;background:${color}"></div>
+                <div class="bar-label">${b.label}</div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }
+
+      body += `<div class="card">
+        <div class="label">ДОДАТКОВО</div>
+        ${kv('Час у поїздках', formatDuration(st.workMs))}
+        ${kv('Найдорожча', `${fmt(st.maxTrip)} грн`)}
+        ${st.unpaid > 0 ? kv('Без позначки про оплату', `${fmt(st.unpaid)} грн`) : ''}
+        ${(period !== 'DAY' && st.daysWithTrips > 1) ? `<hr>
+          ${kv('Днів із поїздками', st.daysWithTrips)}
+          ${kv('У середньому за день', `${fmt(st.revenuePerDay)} грн`)}
+          ${kv('Поїздок на день', fmt(st.tripsPerDay, 1))}` : ''}
+      </div>`;
+
+      // Список поездок живёт на своём экране: он длинный и заслоняет
+      // сводку, ради которой сюда заходят
+      body += `<div class="card tap" data-act="go" data-arg="trips">
+        <div class="row">
+          <span style="font-size:17px;font-weight:700;letter-spacing:.04em">ПОЇЗДКИ</span>
+          <span class="grow"></span>
+          <span style="color:var(--m-dim);font-size:20px">&rsaquo;</span>
+        </div>
+      </div>`;
+    }
+
+    return appbar('Статистика', true)
+      + `<div class="body-scroll">
+        ${tabs}
+        <div class="small" style="text-align:center">${hint}</div>
+        ${body}
+        <div style="height:16px"></div>
+      </div>`;
+  }
+
+  /** ui/StatisticsScreen.kt → TripsScreen: только список за выбранный период. */
+  function tripsScreen() {
+    const period = S.statsPeriod;
+    const st = buildStats(period, Date.now());
+    const showDate = period !== 'DAY';
+    const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+
+    const list = st.trips.length
+      ? st.trips.map(t => {
+        const open = S.expandedTrip === t.finishedAtWallMs;
+        return `<div class="card tap" data-act="expandTrip" data-arg="${t.finishedAtWallMs}">
+          <div class="row between">
+            <span class="mono" style="font-size:14px">${showDate
+              ? formatDate(t.finishedAtWallMs)
+              : `${formatClock(t.startedAtWallMs)} — ${formatClock(t.finishedAtWallMs)}`}</span>
+            <span class="mono" style="font-size:17px;font-weight:700;color:var(--m-accent)">${fmt(t.total)} грн</span>
+          </div>
+          <div class="row">
+            <span class="small grow">${fmt(t.distanceKm)} км · ${formatDuration(t.runningMs + t.idleMs)}${
+              t.payment ? ` · ${paymentTitle(t)}` : ''}${
+              t.profileName ? ` · ${esc(t.profileName)}` : ''}</span>
+            <button class="iconbtn trashbtn" data-act="askDeleteTrip" data-arg="${t.finishedAtWallMs}"
+              aria-label="Видалити поїздку">${svg('del')}</button>
+          </div>
+          ${open ? `<hr>
+            ${kv('Початок', formatClock(t.startedAtWallMs))}
+            ${kv('Кінець', formatClock(t.finishedAtWallMs))}
+            ${kv('У дорозі', formatDuration(t.runningMs))}
+            ${kv('Простій', formatDuration(t.idleMs))}
+            ${kv('Тривалість', formatDuration(t.runningMs + t.idleMs))}
+            ${kv('Відстань', `${fmt(t.distanceKm)} км`)}
+            ${t.profileName ? kv('Тариф', esc(t.profileName)) : ''}
+            ${t.payment ? kv('Оплата', paymentTitle(t)) : ''}
+            ${(t.services && t.services.length) ? kv('Послуги', t.services.join(', ')) : ''}
+            ${(t.services && t.services.length) ? kv('Доплати', `${fmt(t.servicesTotal || 0)} грн`) : ''}
+            ${t.distanceKm > 0 ? kv('Ціна за км', `${fmt(t.total / t.distanceKm)} грн`) : ''}
+          ` : ''}
+        </div>`;
+      }).join('')
+      : `<div class="card">
+          <div style="font-size:17px;font-weight:500">За період немає поїздок</div>
+          <div class="small">Завершіть першу поїздку — усе порахується само.</div>
+        </div>`;
+
+    return appbar(`Поїздки · ${st.tripCount}`, true)
+      + `<div class="body-scroll">
+        <div class="small" style="text-align:center">${
+          (PERIODS.find(p => p.key === period) || {}).hint}</div>
+        ${list}
+        <div style="height:16px"></div>
+      </div>`;
+  }
+
+  /* ui/SettingsScreen.kt */
+  function settingsScreen() {
+    const status = {
+      CONNECTED: S.devName || 'Підключено',
+      CONNECTING: 'Підключення...',
+      ERROR: 'Помилка зв’язку',
+      DEMO: 'Демо-режим',
+      DISCONNECTED: 'Не підключено'
+    }[S.conn];
+
+    const row = (title, subtitle, target) => `<div class="card tap" data-act="go" data-arg="${target}">
+      <div class="row">
+        <div class="grow">
+          <div style="font-size:17px;font-weight:500">${title}</div>
+          <div class="small">${subtitle}</div>
+        </div>
+        <span style="color:var(--m-dim);font-size:20px">&rsaquo;</span>
+      </div>
+    </div>`;
+
+    return appbar('Налаштування', true)
+      + `<div class="body-scroll">
+        ${row('Тарифні профілі', 'Ціна за км, простій, мінімальна ціна', 'profiles')}
+        ${row('Доплати за послуги', 'Діти, тварини, багаж у салоні', 'servicePrices')}
+        ${row('OBD-адаптер', status, 'devices')}
+      </div>`;
+  }
+
+  function meterScreen() {
+    const p = activeProfile();
+    const st = S.trip.state;
+    const controls = {
+      IDLE: [['СТАРТ', 'play', 'var(--m-go)', 'start']],
+      RUNNING: [['ПАУЗА', 'pause', 'var(--m-wait)', 'pause'], ['СТОП', 'stop', 'var(--m-stop)', 'stop']],
+      PAUSED: [['ПРОДОВЖИТИ', 'play', 'var(--m-go)', 'resume'], ['СТОП', 'stop', 'var(--m-stop)', 'stop']],
+      // Поїздку завершено: дальше ведёт итоговый попап поверх экрана
+      FINISHED: []
+    }[st];
+
+    // Полоса о потере связи: без неё обрыв виден только по замершему
+    // счётчику — километры молча перестают набегать
+    const warn = isLive() ? '' : (() => {
+      const connecting = S.conn === 'CONNECTING';
+      const color = connecting ? 'var(--m-wait)' : 'var(--m-stop)';
+      const text = connecting ? 'Перепідключення до авто — пробіг не рахується'
+        : (isActiveTrip() ? 'Немає зв’язку з авто — пробіг не рахується'
+          : 'Немає зв’язку з авто. Підключіть адаптер у налаштуваннях');
+      return `<div class="warnbar" style="color:${color}">
+        ${svg('warning')}<span>${text}</span>
+      </div>`;
+    })();
+
+    return `<div class="appbar">
+      <button class="iconbtn" data-act="back" aria-label="Головне меню">${svg('menu')}</button>
+      <div class="t"></div>
+      <button class="iconbtn" data-act="go" data-arg="pickProfile" aria-label="Тарифи">${svg('tag')}</button>
+    </div>` + warn
+      + `<div class="body-scroll">
+        <div class="profile-name">${p ? esc(p.name) : 'Немає профілів'}</div>
+
+        <div class="card odometer">
+          <div class="label">СУМА</div>
+          <div><span class="big" id="dTotal">0.00</span><span class="unit">грн</span></div>
+        </div>
+
+        <div class="card odometer">
+          <div class="label">ПРОЙДЕНО</div>
+          <div><span class="big" id="dKm">0.00</span><span class="unit">км</span></div>
+        </div>
+
+        <div class="tiles">
+          <div class="tile"><div class="label">У ДОРОЗІ</div><div class="v" id="dRun">00:00</div></div>
+          <div class="tile"><div class="label">ПРОСТІЙ</div><div class="v" id="dIdle">00:00</div></div>
+        </div>
+
+        <div class="card">
+          <div class="label">ДОДАТКОВІ ПОСЛУГИ</div>
+          ${SERVICES.map(s => {
+            const on = S.services.includes(s.key);
+            return `<div class="service" data-act="toggleService" data-arg="${s.key}">
+              <span class="checkbox${on ? ' on' : ''}">${on ? svg('check') : ''}</span>
+              <span class="grow">${s.title}</span>
+              <span class="mono" style="font-size:13px;color:${on ? 'var(--m-accent)' : 'var(--m-dim)'}">
+                +${fmt(S.servicePrices[s.field] || 0)} грн</span>
+            </div>`;
+          }).join('')}
+        </div>
+
+      </div>
+
+      <div class="controls">
+        ${controls.map(([t, i, c, a]) =>
+          `<button class="bigbtn" style="background:${c}" data-act="${a}">${svg(i)}<span>${t}</span></button>`).join('')}
+      </div>`;
+  }
+
+  /**
+   * Один экран в двух режимах: с таксометра — только выбор тарифа,
+   * из настроек — ещё создание, правка и удаление.
+   */
+  function profilesScreen() {
+    const ed = screenName() === 'profiles';   // из настроек
+    const sel = canSelect();                  // во время поездки менять нельзя
+
+    return appbar(ed ? 'Тарифні профілі' : 'Вибір тарифу', true)
+      + `<div class="body-scroll">
+        ${sel ? '' : '<div class="small" style="color:var(--m-wait)">Триває поїздка — змінити тариф можна лише після її завершення.</div>'}
+        ${S.profiles.map(p => `
+          <div class="card ${sel ? 'tap' : ''} ${p.id === S.activeId ? 'sel' : ''}" ${sel ? `data-act="selectProfile" data-arg="${p.id}"` : ''}>
+            <div class="row">
+              ${p.id === S.activeId ? `<span style="color:var(--m-go);display:grid;place-items:center">${svg('check')}</span>` : ''}
+              <span class="grow" style="font-size:17px;font-weight:500">${esc(p.name)}</span>
+              ${ed ? `<button class="textbtn" data-act="edit" data-arg="${p.id}">Змінити</button>
+                      <button class="iconbtn" data-act="del" data-arg="${p.id}" aria-label="Видалити"
+                        style="color:var(--m-stop);width:38px;height:38px">${svg('del')}</button>` : ''}
+            </div>
+            <div class="kv"><span>Вартість 1 км</span><span>${fmt(p.pricePerKm)} грн</span></div>
+            <div class="kv"><span>Простій</span><span>${fmt(p.pricePerIdleMinute)} грн/хв</span></div>
+            <div class="kv"><span>Мінімальна ціна</span><span>${fmt(p.minPrice)} грн</span></div>
+            <div class="kv"><span>Мінімальна відстань</span><span>${fmt(p.minDistanceKm, 1)} км</span></div>
+          </div>`).join('')}
+
+        <div style="height:70px"></div>
+      </div>
+      ${ed ? `<button class="fab" data-act="edit" data-arg="new" aria-label="Додати профіль">${svg('add')}</button>` : ''}`;
+  }
+
+  function editScreen() {
+    const p = S.editing;
+    const f = (id, label, val, mode) => `<div class="mfield"><span class="flabel">${label}</span>
+      <input class="minput" id="${id}" value="${val}" ${mode ? 'inputmode="decimal"' : ''}></div>`;
+    return appbar('Налаштування профілю', true)
+      + `<div class="body-scroll" style="gap:18px;padding-top:10px">
+        <div class="mfield"><span class="flabel">Назва профілю</span>
+          <input class="minput" id="eName" value="${esc(p.name)}" style="font-family:Roboto,sans-serif"></div>
+        ${f('eKm', 'Вартість 1 км, грн', fmt(p.pricePerKm), 1)}
+        ${f('eIdle', 'Вартість простою, грн/хв', fmt(p.pricePerIdleMinute), 1)}
+        ${f('eMin', 'Мінімальна ціна за поїздку, грн', fmt(p.minPrice), 1)}
+        ${f('eMinD', 'Мін. відстань для мін. ціни, км', fmt(p.minDistanceKm, 1), 1)}
+        <div class="small" id="eErr" style="color:var(--m-stop)"></div>
+        <button class="savebtn" data-act="saveProfile">Зберегти</button>
+      </div>`;
+  }
+
+  /* ui/ProfilesScreen.kt → ServicePricesScreen */
+  function servicePricesScreen() {
+    const sp = S.servicePrices;
+    const f = (id, label, val) => `<div class="mfield"><span class="flabel">${label}</span>
+      <input class="minput" id="${id}" value="${val}" inputmode="decimal"></div>`;
+    return appbar('Доплати за послуги', true)
+      + `<div class="body-scroll" style="gap:18px;padding-top:10px">
+        <div class="small">Действуют на всех тарифах. Включённая услуга прибавляет
+          свою цену к минимальной стоимости поездки.</div>
+        ${f('sChildren', 'Діти, грн', fmt(sp.children || 0))}
+        ${f('sPets', 'Тварини, грн', fmt(sp.pets || 0))}
+        ${f('sLuggage', 'Багаж у салоні, грн', fmt(sp.luggage || 0))}
+        <div class="small" id="sErr" style="color:var(--m-stop)"></div>
+        <button class="savebtn" data-act="saveServicePrices">Зберегти</button>
+      </div>`;
+  }
+
+  function devicesScreen() {
+    const live = isLive();
+    return appbar('OBD-адаптер', true,
+      `<button class="iconbtn" aria-label="Оновити список">${svg('refresh')}</button>`)
+      + `<div class="body-scroll">
+        <div class="card">
+          <div class="row">
+            <span class="dot" style="background:${connColor()}"></span>
+            <span class="grow" style="font-size:17px;font-weight:500">${
+              { CONNECTED: 'Підключено', CONNECTING: 'Підключення...', ERROR: 'Помилка',
+                DEMO: 'Демо-режим', DISCONNECTED: 'Не підключено' }[S.conn]}</span>
+            ${S.conn !== 'DISCONNECTED' ? '<button class="outbtn" data-act="disconnect">Відключити</button>' : ''}
+          </div>
+          ${S.protocol ? `<div class="kv"><span>Протокол</span><span>${S.protocol}</span></div>` : ''}
+          ${live ? `<div class="kv"><span>Швидкість</span><span id="dvSpeed">0 км/год</span></div>
+            <div class="kv"><span>Частота опитування</span><span id="dvHz">0.0 Гц</span></div>
+            <div class="kv"><span>Оберти</span><span id="dvRpm">—</span></div>
+            <div class="kv"><span>Напруга</span><span id="dvVolt">—</span></div>
+            ${S.distClear !== null ? `<div class="kv"><span>Пробіг з обнулення помилок</span><span>${S.distClear} км</span></div>` : ''}` : ''}
+        </div>
+
+        <div class="card">
+          <div style="font-size:17px;font-weight:500">Спарені пристрої</div>
+          <div class="small">Адаптер ELM327 сначала спаривается в настройках Bluetooth телефона
+            (обычно PIN 1234 или 0000). Затем выберите его здесь.</div>
+          ${DEVICES.map(d => `<div class="devrow" data-act="connect" data-arg="${d.address}">
+            <div class="grow"><div style="font-size:16px">${d.name}</div>
+              <div class="small mono">${d.address}</div></div>
+            ${d.address === S.selectedAddr ? '<span class="small" style="color:var(--m-accent)">вибраний</span>' : ''}
+          </div>`).join('')}
+        </div>
+
+        <div class="card">
+          <div style="font-size:17px;font-weight:500">Hyundai Sonata 2017</div>
+          <div class="small">Штатный одометр через стандартные OBD-II PID недоступен — его значение
+            хранится в приборной панели и по диагностическому разъёму в открытом виде не отдаётся.
+            Поэтому пробег поездки считается интегрированием скорости с ЭБУ (PID 010D) с частотой
+            10-20 Гц: расхождение с одометром обычно 1-3 %, и убирается коэффициентом калибровки
+            в настройках тарифов.</div>
+          <div class="small" style="color:var(--m-wait)">Запалювання має бути увімкнене, інакше ЕБУ не відповідає.</div>
+        </div>
+        <div style="height:12px"></div>
+      </div>`;
+  }
+
+  /* Итог поездки — ui/TripSummaryDialog.kt */
+  function summaryDialog() {
+    const f = fare();
+    if (!f) return '';
+    const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+
+    // Попап не закрывается «мимо»: поездку нужно завершить явно,
+    // иначе она не попадёт в статистику.
+    return `<div class="scrim">
+      <div class="dialog wide">
+        <div class="dicon">${svg('checkCircle')}</div>
+        <h3 class="center">Поїздку завершено</h3>
+        <div class="dtotal">${fmt(f.total)}<span class="cur">грн</span></div>
+        <hr>
+        ${kv('Відстань', `${fmt(f.distanceKm)} км`)}
+        ${kv('Простій', formatDuration(S.trip.idleMs))}
+        ${kv('Початок', formatClock(S.trip.startedAtWallMs))}
+        ${kv('Кінець', formatClock(S.trip.finishedAtWallMs))}
+        ${kv('Тривалість поїздки', formatDuration(S.trip.runningMs + S.trip.idleMs))}
+        <hr>
+        <div class="label">СПОСІБ ОПЛАТИ</div>
+        ${PAYMENTS.map(m => {
+          const on = S.payment === m.key;
+          return `<div class="service" data-act="selectPayment" data-arg="${m.key}">
+            <span class="checkbox${on ? ' on' : ''}">${on ? svg('check') : ''}</span>
+            <span class="grow">${m.title}</span>
+          </div>`;
+        }).join('')}
+        ${S.paymentError ? '<div class="small" style="color:var(--m-stop)">Виберіть спосіб оплати</div>' : ''}
+        <div class="dactions center">
+          <button class="textbtn" data-act="finishTrip">Завершити поїздку</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function render() {
+    const host = document.getElementById('screenBody');
+    host.innerHTML = {
+      menu: menuScreen,
+      meter: meterScreen,
+      statistics: statisticsScreen,
+      trips: tripsScreen,
+      settings: settingsScreen,
+      profiles: profilesScreen,
+      pickProfile: profilesScreen,
+      edit: editScreen,
+      servicePrices: servicePricesScreen,
+      devices: devicesScreen,
+    }[screenName()]();
+
+    const dlg = document.getElementById('dialogHost');
+    const target = S.pendingDelete ? S.profiles.find(p => p.id === S.pendingDelete) : null;
+
+    if (S.summaryVisible && S.trip.state === 'FINISHED') {
+      dlg.innerHTML = summaryDialog();
+    } else if (target) {
+      dlg.innerHTML = `<div class="scrim" data-act="cancelDelete">
+           <div class="dialog" data-act="noop">
+             <h3>Видалити профіль?</h3>
+             <div class="dtext">${esc(target.name)}</div>
+             <div class="dactions">
+               <button class="textbtn" data-act="cancelDelete">Скасувати</button>
+               <button class="textbtn" data-act="confirmDelete">Видалити</button>
+             </div>
+           </div>
+         </div>`;
+    } else if (S.pendingTripDelete) {
+      const t = S.trips.find(x => x.finishedAtWallMs === S.pendingTripDelete);
+      dlg.innerHTML = t ? `<div class="scrim" data-act="cancelDeleteTrip">
+           <div class="dialog" data-act="noop">
+             <h3>Видалити поїздку?</h3>
+             <div class="dtext">${formatDate(t.finishedAtWallMs)} · ${fmt(t.total)} грн<br>
+               Вона зникне з історії, і статистика перерахується.</div>
+             <div class="dactions">
+               <button class="textbtn" data-act="cancelDeleteTrip">Скасувати</button>
+               <button class="textbtn" data-act="confirmDeleteTrip">Видалити</button>
+             </div>
+           </div>
+         </div>` : '';
+    } else {
+      dlg.innerHTML = '';
+    }
+
+    paintLive();
+  }
+
+  /* Значения, обновляемые каждый кадр — без перестроения разметки */
+  function paintLive() {
+    const set = (id, txt) => { const el = document.getElementById(id); if (el && el.textContent !== txt) el.textContent = txt; };
+    const km = distanceKm(), st = S.trip.state;
+
+    if (screenName() === 'meter') {
+      const f = fare();
+      set('dTotal', fmt(f ? f.total : 0));
+      set('dKm', fmt(km));
+      set('dRun', formatDuration(S.trip.runningMs));
+      set('dIdle', formatDuration(S.trip.idleMs));
+
+      const idleEl = document.getElementById('dIdle');
+      if (idleEl) idleEl.style.color = st === 'PAUSED' ? 'var(--m-wait)' : 'var(--m-on)';
+    }
+
+    // Кнопка поездки в меню тикает вместе со счётчиком
+    if (screenName() === 'menu') {
+      if (st !== 'IDLE') {
+        const f = fare();
+        set('mSum', fmt(f ? f.total : 0) + ' грн');
+        set('mKm', fmt(km) + ' км');
+        set('mDur', formatDuration(S.trip.runningMs + S.trip.idleMs));
+      }
+      animateCar(st === 'RUNNING');
+    }
+
+    if (screenName() === 'devices' && isLive()) {
+      set('dvSpeed', `${S.speed} км/год`);
+      set('dvHz', `${fmt(S.hz, 1)} Гц`);
+      set('dvRpm', S.rpm !== null ? `${S.rpm} об/хв` : '—');
+      set('dvVolt', S.volt !== null ? `${fmt(S.volt, 1)} В` : '—');
+    }
+
+    const now = new Date();
+    set('sbClock', `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+  }
+
+  /* ═══ События ═══ */
+  const screenEl = document.getElementById('screen');
+
+  /* Делегирование: closest() находит ближайший [data-act], поэтому кнопка
+     внутри карточки профиля перехватывает клик у самой карточки. */
+  screenEl.addEventListener('click', e => {
+    const el = e.target.closest('[data-act]');
+    if (!el) return;
+    const act = el.dataset.act, arg = el.dataset.arg;
+
+    switch (act) {
+      case 'start': A.start(); break;
+      case 'pause': A.pause(); break;
+      case 'resume': A.resume(); break;
+      case 'stop': A.stop(); break;
+      case 'selectPayment': A.selectPayment(arg); break;
+      case 'finishTrip': A.finishTrip(); break;
+      case 'toggleService': A.toggleService(arg); break;
+      case 'statsPeriod': S.statsPeriod = arg; S.expandedTrip = null; render(); break;
+      case 'askDeleteTrip': A.askDeleteTrip(arg); break;
+      case 'cancelDeleteTrip': A.cancelDeleteTrip(); break;
+      case 'confirmDeleteTrip': A.confirmDeleteTrip(); break;
+      case 'expandTrip': {
+        const key = Number(arg);
+        S.expandedTrip = (S.expandedTrip === key) ? null : key;
+        render();
+        break;
+      }
+      case 'go': A.go(arg); break;
+      case 'back': A.back(); break;
+      case 'startTrip': A.startTrip(); break;
+      case 'selectProfile': A.selectProfile(arg); break;
+      case 'disconnect': A.disconnect(); break;
+      case 'connect': {
+        const d = DEVICES.find(x => x.address === arg);
+        if (d) A.connect(d);
+        break;
+      }
+      case 'edit': {
+        S.editing = arg === 'new'
+          ? { id: 'p' + Date.now(), name: 'Новий профіль', pricePerKm: 15, pricePerIdleMinute: 2, minPrice: 60, minDistanceKm: 2 }
+          : Object.assign({}, S.profiles.find(p => p.id === arg));
+        S.stack = S.stack.concat('edit');
+        render();
+        break;
+      }
+      case 'del': A.askDelete(arg); break;
+      case 'confirmDelete': A.confirmDelete(); break;
+      case 'cancelDelete': A.cancelDelete(); break;
+      case 'saveServicePrices': {
+        const val = id => parseFloat((document.getElementById(id).value || '').replace(',', '.'));
+        const ch = val('sChildren'), pe = val('sPets'), lu = val('sLuggage');
+        const err = document.getElementById('sErr');
+        if (!isFinite(ch) || ch < 0) err.textContent = 'Некоректна доплата за дітей';
+        else if (!isFinite(pe) || pe < 0) err.textContent = 'Некоректна доплата за тварин';
+        else if (!isFinite(lu) || lu < 0) err.textContent = 'Некоректна доплата за багаж';
+        else {
+          S.servicePrices = { children: ch, pets: pe, luggage: lu };
+          S.stack = S.stack.slice(0, -1);
+          save();
+          render();
+        }
+        break;
+      }
+      case 'saveProfile': {
+        const val = id => parseFloat((document.getElementById(id).value || '').replace(',', '.'));
+        const name = document.getElementById('eName').value.trim();
+        const km = val('eKm'), idle = val('eIdle'), min = val('eMin'), minD = val('eMinD');
+        const err = document.getElementById('eErr');
+        if (!name) err.textContent = 'Вкажіть назву профілю';
+        else if (!isFinite(km) || km < 0) err.textContent = 'Некоректна вартість за км';
+        else if (!isFinite(idle) || idle < 0) err.textContent = 'Некоректна вартість простою';
+        else if (!isFinite(min) || min < 0) err.textContent = 'Некоректна мінімальна ціна';
+        else if (!isFinite(minD) || minD < 0) err.textContent = 'Некоректна мінімальна відстань';
+        else A.saveProfile({
+          id: S.editing.id, name, pricePerKm: km, pricePerIdleMinute: idle,
+          minPrice: min, minDistanceKm: minD
+        });
+        break;
+      }
+    }
+  });
+
+  render();
+  requestAnimationFrame(tick);
+
+  // Чистка прошла при загрузке — закрепляем результат и сообщаем о ней
+  if (removedUnpaid > 0) {
+    save();
+    toast(`Видалено ${removedUnpaid} поїздок без способу оплати`);
+  }
+</script>
