@@ -41,7 +41,7 @@ android {
     }
 
     lint {
-        // Разрешения на Bluetooth запрашиваются в рантайме, статический
+        // Разрешение на местоположение запрашивается в рантайме, статический
         // анализатор этого не видит — не роняем сборку на его предупреждениях.
         abortOnError = false
     }
@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.play.services.location)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
 }

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,10 +51,6 @@ import com.taxi.meter.ui.theme.MeterColors
 fun ProfilesScreen(
     profiles: List<Profile>,
     activeProfileId: String?,
-    /** Показывать «Змінити», «Видалити» и кнопку добавления */
-    editable: Boolean,
-    /** Можно ли сменить тариф: во время поездки нельзя */
-    selectable: Boolean,
     onSelect: (String) -> Unit,
     onEdit: (Profile) -> Unit,
     onDelete: (String) -> Unit,
@@ -65,7 +62,7 @@ fun ProfilesScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(if (editable) "Тарифні профілі" else "Вибір тарифу") },
+                title = { Text("Тарифи") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
@@ -77,10 +74,8 @@ fun ProfilesScreen(
             )
         },
         floatingActionButton = {
-            if (editable) {
-                FloatingActionButton(onClick = { onEdit(Profile()) }) {
-                    Icon(Icons.Filled.Add, contentDescription = "Додати профіль")
-                }
+            FloatingActionButton(onClick = { onEdit(Profile()) }) {
+                Icon(Icons.Filled.Add, contentDescription = "Додати тариф")
             }
         },
     ) { padding ->
@@ -91,21 +86,10 @@ fun ProfilesScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (!selectable) {
-                item {
-                    Text(
-                        text = "Триває поїздка — змінити тариф можна лише після її завершення.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MeterColors.wait,
-                    )
-                }
-            }
             items(profiles, key = { it.id }) { profile ->
                 ProfileRow(
                     profile = profile,
                     selected = profile.id == activeProfileId,
-                    editable = editable,
-                    selectable = selectable,
                     onSelect = { onSelect(profile.id) },
                     onEdit = { onEdit(profile) },
                     onDelete = { pendingDelete = profile },
@@ -118,7 +102,7 @@ fun ProfilesScreen(
     pendingDelete?.let { profile ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Видалити профіль?") },
+            title = { Text("Видалити тариф?") },
             text = { Text(profile.name) },
             confirmButton = {
                 TextButton(onClick = {
@@ -137,16 +121,14 @@ fun ProfilesScreen(
 private fun ProfileRow(
     profile: Profile,
     selected: Boolean,
-    editable: Boolean,
-    selectable: Boolean,
     onSelect: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    // Вся карточка — кнопка выбора тарифа; «Змінити» и «Видалити» внутри
+    // Вся карточка — кнопка выбора тарифа; шестерёнка и корзина внутри
     // перехватывают нажатие на себя.
     SectionCard(
-        modifier = Modifier.clickable(enabled = selectable) { onSelect() },
+        modifier = Modifier.clickable { onSelect() },
         border = BorderStroke(
             width = 1.dp,
             color = if (selected) MeterColors.go else MaterialTheme.colorScheme.outline,
@@ -166,15 +148,19 @@ private fun ProfileRow(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
-            if (editable) {
-                TextButton(onClick = onEdit) { Text("Змінити") }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Filled.Delete,
-                        contentDescription = "Видалити",
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = "Налаштувати тариф",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = "Видалити тариф",
+                    tint = MaterialTheme.colorScheme.error,
+                )
             }
         }
         KeyValueRow("Вартість 1 км", "${fmt(profile.pricePerKm)} грн")
@@ -278,7 +264,7 @@ fun ProfileEditScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Налаштування профілю") },
+                title = { Text("Налаштування тарифу") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),

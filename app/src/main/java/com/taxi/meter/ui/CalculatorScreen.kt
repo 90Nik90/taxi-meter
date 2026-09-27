@@ -1,0 +1,458 @@
+package com.taxi.meter.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.taxi.meter.data.CalcInput
+import com.taxi.meter.data.ExtraService
+import com.taxi.meter.data.Profile
+import com.taxi.meter.data.ServicePrices
+import com.taxi.meter.meter.MeterSnapshot
+import com.taxi.meter.meter.MeterState
+import com.taxi.meter.ui.theme.MeterColors
+
+/**
+ * Калькулятор поездки. Расстояние либо вводится руками, либо, если в
+ * настройках включён счётчик, набегает само по GPS — тогда сверху полей
+ * появляются Старт, Пауза и Стоп, а сами поля заполняются счётчиком.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CalculatorScreen(
+    profile: Profile?,
+    servicePrices: ServicePrices,
+    input: CalcInput,
+    meter: MeterSnapshot,
+    gpsEnabled: Boolean,
+    onDistanceChange: (String) -> Unit,
+    onIdleChange: (String) -> Unit,
+    onToggleService: (ExtraService) -> Unit,
+    onReset: () -> Unit,
+    onStartMeter: () -> Unit,
+    onPauseMeter: () -> Unit,
+    onResumeMeter: () -> Unit,
+    onStopMeter: () -> Unit,
+    onOpenProfiles: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val fare = input.fare(profile, servicePrices)
+    val focus = LocalFocusManager.current
+
+    // Пока счётчик работает, поля заполняет он: руками их не трогаем,
+    // иначе набранное затрётся следующей выборкой.
+    val locked = gpsEnabled && meter.isActive
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+    ) {
+        TopAppBar(
+            title = {},
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background,
+            ),
+            // Тариф меняется нажатием на его название ниже, поэтому
+            // сверху остаётся только вход в настройки.
+            actions = {
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = "Налаштування")
+                }
+            },
+        )
+
+        if (gpsEnabled && meter.isActive && !meter.hasFix) SignalWarning()
+
+        Column(
+            modifier = Modifier
+                .weight(1f, fill = true)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TariffHeader(profile = profile, onClick = onOpenProfiles)
+
+            SumReadout(fmt(fare?.total ?: 0.0))
+
+            AmountField(
+                label = "Відстань",
+                suffix = "км",
+                value = input.distanceText,
+                decimal = true,
+                enabled = !locked,
+                imeAction = ImeAction.Next,
+                onValueChange = onDistanceChange,
+                onDone = {},
+            )
+            AmountField(
+                label = "Очікування",
+                suffix = "хв",
+                value = input.idleText,
+                decimal = false,
+                enabled = !locked,
+                imeAction = ImeAction.Done,
+                onValueChange = onIdleChange,
+                onDone = { focus.clearFocus() },
+            )
+
+            if (gpsEnabled) {
+                MeterControls(
+                    state = meter.state,
+                    speedKmh = meter.speedKmh,
+                    onStart = {
+                        focus.clearFocus()
+                        onStartMeter()
+                    },
+                    onPause = onPauseMeter,
+                    onResume = onResumeMeter,
+                    onStop = onStopMeter,
+                )
+            }
+
+            ServicesCard(
+                prices = servicePrices,
+                selected = input.services,
+                onToggle = onToggleService,
+            )
+
+            Spacer(Modifier.height(4.dp))
+        }
+
+        Button(
+            onClick = {
+                focus.clearFocus()
+                onReset()
+            },
+            enabled = !input.isEmpty || meter.isActive,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .height(56.dp),
+            shape = MaterialTheme.shapes.large,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+        ) {
+            Text("СКИНУТИ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+    }
+}
+
+/**
+ * Кнопки счётчика. В покое одна широкая «Почати відлік», в работе —
+ * пауза и стоп, на паузе — продовжити и стоп.
+ */
+@Composable
+private fun MeterControls(
+    state: MeterState,
+    speedKmh: Int,
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onResume: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            when (state) {
+                MeterState.IDLE -> MeterButton(
+                    text = "ПОЧАТИ ВІДЛІК",
+                    icon = Icons.Filled.PlayArrow,
+                    color = MeterColors.go,
+                    onClick = onStart,
+                    modifier = Modifier.weight(1f),
+                )
+
+                MeterState.RUNNING -> {
+                    MeterButton(
+                        text = "ОЧІКУВАННЯ",
+                        icon = Icons.Filled.Pause,
+                        color = MeterColors.wait,
+                        onClick = onPause,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MeterButton(
+                        text = "СТОП",
+                        icon = Icons.Filled.Stop,
+                        color = MeterColors.stop,
+                        onClick = onStop,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                MeterState.PAUSED -> {
+                    MeterButton(
+                        text = "ПОЇХАЛИ",
+                        icon = Icons.Filled.PlayArrow,
+                        color = MeterColors.go,
+                        onClick = onResume,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MeterButton(
+                        text = "СТОП",
+                        icon = Icons.Filled.Stop,
+                        color = MeterColors.stop,
+                        onClick = onStop,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        if (state == MeterState.RUNNING) {
+            Text(
+                text = "$speedKmh км/год",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MeterButton(
+    text: String,
+    icon: ImageVector,
+    color: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = color,
+            contentColor = Color(0xFF101418),
+        ),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(8.dp))
+        AutoFitText(
+            text = text,
+            maxFontSize = 15.sp,
+            modifier = Modifier.weight(1f, fill = false),
+            fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/**
+ * Полоса о потере сигнала. Без неё обрыв виден только по замершему
+ * счётчику: километры молча перестают набегать, и за рулём это легко
+ * пропустить.
+ */
+@Composable
+private fun SignalWarning() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(MeterColors.wait.copy(alpha = 0.16f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Немає сигналу GPS — кілометри не рахуються",
+            style = MaterialTheme.typography.bodySmall,
+            color = MeterColors.wait,
+        )
+    }
+}
+
+/** Название тарифа и его основные цифры; нажатие ведёт к выбору тарифа. */
+@Composable
+private fun TariffHeader(profile: Profile?, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = profile?.name ?: "Немає тарифів",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+        )
+        if (profile != null) {
+            Text(
+                text = "${fmt(profile.pricePerKm)} грн/км · мін. ${fmt(profile.minPrice)} грн " +
+                    "до ${fmt(profile.minDistanceKm, 1)} км",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SumReadout(value: String) {
+    SectionCard {
+        Text(
+            text = "ДО СПЛАТИ",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            AutoFitText(
+                text = value,
+                maxFontSize = 60.sp,
+                modifier = Modifier.weight(1f, fill = false),
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = MeterColors.accent,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "грн",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Поле ввода с крупными цифрами и подписью единицы справа: за рулём
+ * набирать мелкое поле неудобно.
+ */
+@Composable
+private fun AmountField(
+    label: String,
+    suffix: String,
+    value: String,
+    decimal: Boolean,
+    enabled: Boolean,
+    imeAction: ImeAction,
+    onValueChange: (String) -> Unit,
+    onDone: () -> Unit,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { raw ->
+            val cleaned = raw.replace(',', '.').filter { it.isDigit() || (decimal && it == '.') }
+            // Точку допускаем только одну: «12.4.5» ничего не значит
+            val normalized = if (decimal) {
+                val first = cleaned.indexOf('.')
+                if (first < 0) cleaned
+                else cleaned.substring(0, first + 1) + cleaned.substring(first + 1).replace(".", "")
+            } else cleaned
+            onValueChange(normalized)
+        },
+        enabled = enabled,
+        label = { Text(label) },
+        suffix = { Text(suffix) },
+        singleLine = true,
+        textStyle = TextStyle(
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+        ),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (decimal) KeyboardType.Decimal else KeyboardType.Number,
+            imeAction = imeAction,
+        ),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Дополнительные услуги. Каждая включённая добавляет свою цену
+ * к минимальной стоимости поездки.
+ */
+@Composable
+private fun ServicesCard(
+    prices: ServicePrices,
+    selected: Set<ExtraService>,
+    onToggle: (ExtraService) -> Unit,
+) {
+    SectionCard {
+        Text(
+            text = "ДОДАТКОВІ ПОСЛУГИ",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ExtraService.entries.forEach { service ->
+            val checked = service in selected
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle(service) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = checked, onCheckedChange = { onToggle(service) })
+                Text(
+                    text = service.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "+${fmt(service.priceIn(prices))} грн",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (checked) MeterColors.accent
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}

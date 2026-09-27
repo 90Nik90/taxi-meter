@@ -22,25 +22,10 @@ class Storage(context: Context) {
     private val _settings = MutableStateFlow(loadSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
-    private val _trips = MutableStateFlow(loadTrips())
-
-    /** Завершённые поездки, новые первыми. */
-    val trips: StateFlow<List<TripRecord>> = _trips.asStateFlow()
-
     init {
-        // Старые записи хранили подпись способа оплаты, а не ключ,
-        // и подпись была русской — переводим на текущий формат.
-        val migrated = _trips.value.map {
-            when (it.payment) {
-                "Наличные", "Готівка" -> it.copy(payment = PaymentMethod.CASH.name)
-                "Карта", "Картка" -> it.copy(payment = PaymentMethod.CARD.name)
-                else -> it
-            }
-        }
-        // Записи без способа оплаты остались от версий, где его ещё
-        // не спрашивали: они ломали разбивку по оплате в статистике.
-        val cleaned = migrated.filter { it.payment.isNotBlank() }
-        if (cleaned != _trips.value) persistTrips(cleaned)
+        // История поездок осталась от версии со статистикой; сама
+        // статистика убрана, поэтому записи больше не нужны.
+        if (prefs.contains(KEY_TRIPS)) prefs.edit().remove(KEY_TRIPS).apply()
     }
 
     val activeProfile: Profile?
@@ -90,32 +75,6 @@ class Storage(context: Context) {
 
     fun selectProfile(id: String) = updateSettings { it.copy(activeProfileId = id) }
 
-    // --- Поездки --------------------------------------------------------
-
-    private fun loadTrips(): List<TripRecord> {
-        val raw = prefs.getString(KEY_TRIPS, null) ?: return emptyList()
-        return runCatching { json.decodeFromString<List<TripRecord>>(raw) }
-            .getOrElse { emptyList() }
-    }
-
-    /** Записать завершённую поездку. Новые лежат первыми. */
-    fun addTrip(record: TripRecord) {
-        persistTrips((listOf(record) + _trips.value).take(MAX_TRIPS))
-    }
-
-    /**
-     * Видалити поїздку из истории. Ключ — момент завершения: две поездки
-     * не могут закончиться в одну и ту же миллисекунду.
-     */
-    fun deleteTrip(finishedAtWallMs: Long) {
-        persistTrips(_trips.value.filterNot { it.finishedAtWallMs == finishedAtWallMs })
-    }
-
-    private fun persistTrips(list: List<TripRecord>) {
-        prefs.edit().putString(KEY_TRIPS, json.encodeToString(list)).apply()
-        _trips.value = list
-    }
-
     private fun defaultProfiles(): List<Profile> = listOf(
         Profile(
             name = "Місто",
@@ -136,9 +95,8 @@ class Storage(context: Context) {
     private companion object {
         const val KEY_PROFILES = "profiles"
         const val KEY_SETTINGS = "settings"
-        const val KEY_TRIPS = "trips"
 
-        /** Сколько поездок храним в истории */
-        const val MAX_TRIPS = 500
+        /** Ключ истории поездок из версии со статистикой */
+        const val KEY_TRIPS = "trips"
     }
 }

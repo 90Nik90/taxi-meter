@@ -4,195 +4,147 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.taxi.meter.data.AppSettings
+import com.taxi.meter.data.CalcInput
 import com.taxi.meter.data.ExtraService
 import com.taxi.meter.data.Profile
-import com.taxi.meter.data.PaymentMethod
 import com.taxi.meter.data.ServicePrices
-import com.taxi.meter.data.TripRecord
 import com.taxi.meter.meter.MeterService
-import com.taxi.meter.meter.TripSnapshot
-import com.taxi.meter.meter.TripState
-import com.taxi.meter.obd.BtDeviceInfo
-import com.taxi.meter.obd.ObdState
+import com.taxi.meter.meter.MeterSnapshot
+import com.taxi.meter.meter.MeterState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val taxi = app as TaxiApp
 
-    val trip: StateFlow<TripSnapshot> = taxi.trip.snapshot
-    val obd: StateFlow<ObdState> = taxi.obd.state
     val profiles: StateFlow<List<Profile>> = taxi.storage.profiles
     val settings: StateFlow<AppSettings> = taxi.storage.settings
-    val trips: StateFlow<List<TripRecord>> = taxi.storage.trips
+    val meter: StateFlow<MeterSnapshot> = taxi.meter.snapshot
 
-    private val _devices = MutableStateFlow<List<BtDeviceInfo>>(emptyList())
-    val devices: StateFlow<List<BtDeviceInfo>> = _devices.asStateFlow()
+    private val _calc = MutableStateFlow(CalcInput())
+    val calc: StateFlow<CalcInput> = _calc.asStateFlow()
 
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
-
-    /** Попап с итогом поездки — показывается сразу после «Стоп». */
-    private val _summaryVisible = MutableStateFlow(false)
-    val summaryVisible: StateFlow<Boolean> = _summaryVisible.asStateFlow()
 
     val activeProfile: Profile?
         get() = taxi.storage.activeProfile
 
     init {
-        // Собственный тикер: интерфейс обновляется, даже если сервис
-        // не поднялся (например, система запретила запуск из фона).
+        // Собственный тикер: минуты ожидания и живой километраж должны
+        // идти, даже если сервис не поднялся.
         viewModelScope.launch {
             while (true) {
-                if (taxi.trip.snapshot.value.isActive) taxi.trip.tick()
-                delay(250)
+                val snapshot = taxi.meter.snapshot.value
+                if (snapshot.isActive) {
+                    taxi.meter.tick()
+                    pushMeterIntoCalc()
+                }
+                delay(500)
             }
         }
-        refreshDevices()
     }
 
     // --- Профили ---------------------------------------------------------
 
-    fun selectProfile(id: String) {
-        taxi.storage.selectProfile(id)
-        taxi.trip.setProfile(taxi.storage.activeProfile)
-    }
+    fun selectProfile(id: String) = taxi.storage.selectProfile(id)
 
-    fun saveProfile(profile: Profile) {
-        taxi.storage.saveProfile(profile)
-        taxi.trip.setProfile(taxi.storage.activeProfile)
-    }
+    fun saveProfile(profile: Profile) = taxi.storage.saveProfile(profile)
 
-    fun deleteProfile(id: String) {
-        taxi.storage.deleteProfile(id)
-        taxi.trip.setProfile(taxi.storage.activeProfile)
-    }
-
-    fun toggleService(service: ExtraService) = taxi.trip.toggleService(service)
+    fun deleteProfile(id: String) = taxi.storage.deleteProfile(id)
 
     fun saveServicePrices(prices: ServicePrices) {
         taxi.storage.updateSettings { it.copy(servicePrices = prices) }
-        taxi.trip.setServicePrices(prices)
     }
 
-    fun setCalibration(value: Double) {
-        taxi.storage.updateSettings { it.copy(calibration = value) }
-        taxi.trip.setCalibration(value)
+    /** Галочка «рахувати відстань по GPS» в настройках. */
+    fun setGpsEnabled(enabled: Boolean) {
+        taxi.storage.updateSettings { it.copy(gpsEnabled = enabled) }
+        if (!enabled) stopMeter(write = false)
     }
 
-    // --- Адаптер ---------------------------------------------------------
+    // --- Калькулятор -----------------------------------------------------
 
-    fun refreshDevices() {
-        _devices.value = taxi.obd.pairedDevices()
+    fun setDistance(text: String) {
+        _calc.value = _calc.value.copy(distanceText = text)
     }
 
-    fun hasBluetoothPermission() = taxi.obd.hasBluetoothPermission()
-
-    fun isBluetoothOn() = taxi.obd.isBluetoothOn
-
-    fun connect(device: BtDeviceInfo) {
-        taxi.storage.updateSettings {
-            it.copy(deviceAddress = device.address, deviceName = device.name, demoMode = false)
-        }
-        taxi.obd.connect(device.address, device.name)
+    fun setIdleMinutes(text: String) {
+        _calc.value = _calc.value.copy(idleText = text)
     }
 
-    fun reconnectSaved() {
-        val s = taxi.storage.settings.value
-        if (s.demoMode) {
-            taxi.obd.startDemo()
-            return
-        }
-        val address = s.deviceAddress
-        if (address == null) {
-            _toast.value = "Спочатку виберіть OBD-адаптер"
-            return
-        }
-        taxi.obd.connect(address, s.deviceName)
-    }
-
-    fun setDemoMode(enabled: Boolean) {
-        taxi.storage.updateSettings { it.copy(demoMode = enabled) }
-        if (enabled) taxi.obd.startDemo() else taxi.obd.disconnect()
-    }
-
-    fun disconnect() = taxi.obd.disconnect()
-
-    // --- Таксометр -------------------------------------------------------
-
-    fun start() {
-        val profile = taxi.storage.activeProfile
-        if (profile == null) {
-            _toast.value = "Створіть тарифний профіль"
-            return
-        }
-        if (!taxi.obd.state.value.isLive) {
-            _toast.value = "Немає зв’язку з авто — підключіть адаптер"
-            return
-        }
-        taxi.trip.start(profile)
-        MeterService.start(getApplication())
-    }
-
-    fun pause() = taxi.trip.pause()
-
-    fun resume() = taxi.trip.resume()
-
-    fun stop() {
-        taxi.trip.stop()
-        MeterService.stop(getApplication())
-        _summaryVisible.value = true
-    }
-
-    /**
-     * Завершити поїздку из итогового попапа: записать её в историю
-     * и обнулить счётчик.
-     */
-    fun finishTrip(payment: PaymentMethod) {
-        recordTrip(payment)
-        _summaryVisible.value = false
-        taxi.trip.reset()
-        taxi.trip.setProfile(taxi.storage.activeProfile)
-    }
-
-    /** Завершённая поездка уходит в историю для статистики. */
-    private fun recordTrip(payment: PaymentMethod) {
-        val snap = taxi.trip.snapshot.value
-        val fare = snap.fare ?: return
-        taxi.storage.addTrip(
-            TripRecord(
-                startedAtWallMs = snap.startedAtWallMs,
-                finishedAtWallMs = snap.finishedAtWallMs,
-                distanceKm = snap.distanceKm,
-                runningMs = snap.runningMs,
-                idleMs = snap.idleMs,
-                total = fare.total,
-                profileName = snap.profile?.name ?: "",
-                services = snap.services.map { it.title },
-                payment = payment.name,
-                servicesTotal = fare.servicesPart,
-            )
+    fun toggleService(service: ExtraService) {
+        val current = _calc.value.services
+        _calc.value = _calc.value.copy(
+            services = if (service in current) current - service else current + service,
         )
     }
 
-    /** Убрать поездку из истории и из статистики. */
-    fun deleteTrip(trip: TripRecord) = taxi.storage.deleteTrip(trip.finishedAtWallMs)
+    fun resetCalc() {
+        stopMeter(write = false)
+        taxi.meter.reset()
+        _calc.value = CalcInput()
+    }
+
+    // --- Счётчик ---------------------------------------------------------
+
+    fun hasLocationPermission() = taxi.gps.hasPermission()
+
+    /**
+     * Запустить счётчик. Разрешение спрашивает экран: без него приёмник
+     * молчит, и километры не набегают.
+     */
+    fun startMeter(): Boolean {
+        if (!taxi.gps.hasPermission()) {
+            _toast.value = "Дозвольте доступ до місцезнаходження"
+            return false
+        }
+        taxi.meter.start()
+        taxi.gps.start()
+        MeterService.start(getApplication())
+        pushMeterIntoCalc()
+        return true
+    }
+
+    fun pauseMeter() {
+        taxi.meter.pause()
+        pushMeterIntoCalc()
+    }
+
+    fun resumeMeter() {
+        taxi.meter.resume()
+        pushMeterIntoCalc()
+    }
+
+    /** Остановить счётчик; итог остаётся в полях калькулятора. */
+    fun stopMeter(write: Boolean = true) {
+        if (taxi.meter.snapshot.value.state == MeterState.IDLE) return
+        val result = taxi.meter.stop()
+        taxi.gps.stop()
+        MeterService.stop(getApplication())
+        if (write) writeToCalc(result)
+    }
+
+    /** Живые показания счётчика видны прямо в полях калькулятора. */
+    private fun pushMeterIntoCalc() {
+        val snapshot = taxi.meter.snapshot.value
+        if (!snapshot.isActive) return
+        writeToCalc(snapshot)
+    }
+
+    private fun writeToCalc(snapshot: MeterSnapshot) {
+        _calc.value = _calc.value.copy(
+            distanceText = String.format(Locale.US, "%.2f", snapshot.distanceKm),
+            idleText = if (snapshot.idleMinutes > 0) snapshot.idleMinutes.toString() else "",
+        )
+    }
 
     fun consumeToast() {
         _toast.value = null
     }
-
-    /**
-     * Менять тариф можно только когда поездки нет. На завершённой тоже
-     * нельзя: смена профиля пересчитала бы уже показанную сумму.
-     */
-    val canSelectProfile: Boolean
-        get() = taxi.trip.snapshot.value.state == TripState.IDLE
-
-    val canEditProfiles: Boolean
-        get() = canSelectProfile
 }

@@ -4,34 +4,27 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import com.taxi.meter.data.Storage
-import com.taxi.meter.meter.TripEngine
-import com.taxi.meter.obd.ObdManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
+import com.taxi.meter.gps.GpsSource
+import com.taxi.meter.meter.DistanceMeter
 
 class TaxiApp : Application() {
 
     lateinit var storage: Storage
         private set
-    lateinit var obd: ObdManager
+    lateinit var meter: DistanceMeter
         private set
-    lateinit var trip: TripEngine
+    lateinit var gps: GpsSource
         private set
-
-    private val appScope = CoroutineScope(SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
         storage = Storage(this)
-        trip = TripEngine()
-        obd = ObdManager(this, appScope)
+        meter = DistanceMeter()
+        gps = GpsSource(this)
 
-        // Единственный источник расстояния: выборки скорости с ЭБУ.
-        obd.onSpeedSample = { speed, atMs -> trip.onSpeedSample(speed, atMs) }
-
-        trip.setProfile(storage.activeProfile)
-        trip.setCalibration(storage.settings.value.calibration)
-        trip.setServicePrices(storage.settings.value.servicePrices)
+        // Единственный источник расстояния: выборки скорости с GPS
+        gps.onSpeedSample = { kmh, atMs -> meter.onSpeedSample(kmh, atMs) }
+        gps.onFixLost = { meter.onFixLost() }
 
         createChannel()
     }
@@ -50,6 +43,6 @@ class TaxiApp : Application() {
     }
 
     companion object {
-        const val CHANNEL_ID = "trip"
+        const val CHANNEL_ID = "meter"
     }
 }

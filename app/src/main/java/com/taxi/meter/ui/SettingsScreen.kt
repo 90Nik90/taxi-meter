@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -23,14 +24,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Настройки: точки входа в тарифы, доплаты и адаптер. */
+/** Настройки: счётчик по GPS, тарифы и доплаты за услуги. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    adapterStatus: String,
+    gpsEnabled: Boolean,
+    onGpsEnabledChange: (Boolean) -> Unit,
     onOpenProfiles: () -> Unit,
     onOpenServices: () -> Unit,
-    onOpenDevices: () -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -56,8 +57,15 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            SwitchRow(
+                title = "Лічильник по GPS",
+                subtitle = "Відстань рахується сама під час поїздки — " +
+                    "на калькуляторі з’являються «Почати відлік» і «Стоп»",
+                checked = gpsEnabled,
+                onCheckedChange = onGpsEnabledChange,
+            )
             SettingsRow(
-                title = "Тарифні профілі",
+                title = "Тарифи",
                 subtitle = "Ціна за км, простій, мінімальна ціна",
                 onClick = onOpenProfiles,
             )
@@ -66,11 +74,31 @@ fun SettingsScreen(
                 subtitle = "Діти, тварини, багаж у салоні",
                 onClick = onOpenServices,
             )
-            SettingsRow(
-                title = "OBD-адаптер",
-                subtitle = adapterStatus,
-                onClick = onOpenDevices,
-            )
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    SectionCard(modifier = Modifier.clickable { onCheckedChange(!checked) }) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     }
 }

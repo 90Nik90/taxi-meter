@@ -18,82 +18,46 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.taxi.meter.MainViewModel
 import com.taxi.meter.data.Profile
-import com.taxi.meter.data.StatsPeriod
-import com.taxi.meter.meter.TripState
-import com.taxi.meter.obd.ConnectionState
-import kotlinx.coroutines.delay
 
 private enum class Screen {
-    MENU, METER, STATISTICS,
+    /** Калькулятор — главный экран: расстояние, ожидание, услуги */
+    CALC,
 
-    /** Список поездок за выбранный в статистике период */
-    TRIPS,
-
-    SETTINGS,
-
-    /** Вибір тарифу с таксометра: только список */
-    PROFILE_PICKER,
-
-    /** Тарифы из настроек: список плюс создание, правка и удаление */
+    /** Тарифы: выбрать, поправить шестерёнкой, удалить корзиной */
     PROFILES,
 
-    PROFILE_EDIT, SERVICE_PRICES, DEVICES
+    PROFILE_EDIT, SETTINGS, SERVICE_PRICES
 }
 
 @Composable
 fun TaxiRoot(
     vm: MainViewModel,
-    onRequestPermissions: () -> Unit,
+    onRequestLocationPermission: () -> Unit,
 ) {
-    val trip by vm.trip.collectAsStateWithLifecycle()
-    val obd by vm.obd.collectAsStateWithLifecycle()
     val profiles by vm.profiles.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val trips by vm.trips.collectAsStateWithLifecycle()
-    val devices by vm.devices.collectAsStateWithLifecycle()
+    val calc by vm.calc.collectAsStateWithLifecycle()
+    val meter by vm.meter.collectAsStateWithLifecycle()
     val toast by vm.toast.collectAsStateWithLifecycle()
-    val summaryVisible by vm.summaryVisible.collectAsStateWithLifecycle()
+
+    // Активный тариф читается из хранилища; список и настройки собраны
+    // выше, поэтому его смена приводит к перерисовке.
+    val activeProfile = vm.activeProfile
 
     // Простой стек экранов: «назад» всегда возвращает туда, откуда пришли.
-    var stack by remember { mutableStateOf(listOf(Screen.MENU)) }
+    // Внизу всегда калькулятор — отдельного меню нет.
+    var stack by remember { mutableStateOf(listOf(Screen.CALC)) }
     val screen = stack.last()
     val go = { next: Screen -> stack = stack + next }
     val back = { if (stack.size > 1) stack = stack.dropLast(1) }
 
-    // Вибір тарифу всегда приводит на таксометр, откуда бы ни зашли.
-    val goMeter = {
-        val index = stack.indexOf(Screen.METER)
-        stack = if (index >= 0) stack.take(index + 1) else listOf(Screen.MENU, Screen.METER)
-    }
-
     var editing by remember { mutableStateOf<Profile?>(null) }
-
-    // Период статистики живёт выше экрана: он нужен и списку поездок
-    var statsPeriod by remember { mutableStateOf(StatsPeriod.DAY) }
-
-    // Часы для границ периодов статистики
-    var nowWallMs by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            nowWallMs = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
 
     val snackbar = remember { SnackbarHostState() }
 
     BackHandler(enabled = stack.size > 1) {
         if (stack.last() == Screen.PROFILE_EDIT) editing = null
         back()
-    }
-
-    // Один раз при запуске поднимаем связь с ранее выбранным адаптером.
-    LaunchedEffect(Unit) {
-        if (obd.connection == ConnectionState.DISCONNECTED &&
-            (settings.demoMode || settings.deviceAddress != null)
-        ) {
-            vm.reconnectSaved()
-        }
     }
 
     LaunchedEffect(toast) {
@@ -108,100 +72,59 @@ fun TaxiRoot(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         when (screen) {
-            Screen.MENU -> MainMenuScreen(
-                trip = trip,
-                onStartTrip = {
-                    // Поездка начинается с выбора тарифа; «назад» отсюда —
-                    // сразу таксометр с тем тарифом, что был выбран раньше.
-                    stack = listOf(Screen.MENU, Screen.METER, Screen.PROFILE_PICKER)
-                },
-                onOpenMeter = { go(Screen.METER) },
-                onOpenStatistics = { go(Screen.STATISTICS) },
-                onOpenSettings = { go(Screen.SETTINGS) },
-            )
-
-            Screen.METER -> Box(
+            Screen.CALC -> Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                MeterScreen(
-                    trip = trip,
-                    obd = obd,
-                    activeProfileName = vm.activeProfile?.name,
+                CalculatorScreen(
+                    profile = activeProfile,
+                    servicePrices = settings.servicePrices,
+                    input = calc,
+                    meter = meter,
+                    gpsEnabled = settings.gpsEnabled,
+                    onDistanceChange = vm::setDistance,
+                    onIdleChange = vm::setIdleMinutes,
                     onToggleService = vm::toggleService,
-                    onStart = vm::start,
-                    onPause = vm::pause,
-                    onResume = vm::resume,
-                    onStop = vm::stop,
-                    onOpenProfiles = { go(Screen.PROFILE_PICKER) },
-                    onOpenMenu = back,
+                    onReset = vm::resetCalc,
+                    onStartMeter = {
+                        // Разрешение спрашиваем в момент, когда оно нужно:
+                        // до первой поездки система о нём не спросит.
+                        if (vm.hasLocationPermission()) vm.startMeter()
+                        else onRequestLocationPermission()
+                    },
+                    onPauseMeter = vm::pauseMeter,
+                    onResumeMeter = vm::resumeMeter,
+                    onStopMeter = { vm.stopMeter() },
+                    onOpenProfiles = { go(Screen.PROFILES) },
+                    onOpenSettings = { go(Screen.SETTINGS) },
                 )
             }
 
-            Screen.STATISTICS -> StatisticsScreen(
-                trips = trips,
-                period = statsPeriod,
-                nowWallMs = nowWallMs,
-                onPeriodChange = { statsPeriod = it },
-                onOpenTrips = { go(Screen.TRIPS) },
-                onBack = back,
-            )
-
-            Screen.TRIPS -> TripsScreen(
-                trips = trips,
-                period = statsPeriod,
-                nowWallMs = nowWallMs,
-                onDeleteTrip = vm::deleteTrip,
-                onBack = back,
-            )
-
-            Screen.SETTINGS -> SettingsScreen(
-                adapterStatus = when (obd.connection) {
-                    ConnectionState.CONNECTED -> obd.deviceName ?: "Підключено"
-                    ConnectionState.CONNECTING -> "Підключення..."
-                    ConnectionState.ERROR -> "Помилка зв’язку"
-                    ConnectionState.DEMO -> "Демо-режим"
-                    ConnectionState.DISCONNECTED -> "Не підключено"
-                },
-                onOpenProfiles = { go(Screen.PROFILES) },
-                onOpenServices = { go(Screen.SERVICE_PRICES) },
-                onOpenDevices = {
-                    vm.refreshDevices()
-                    go(Screen.DEVICES)
-                },
-                onBack = back,
-            )
-
-            // Список без правки: только переключить тариф
-            Screen.PROFILE_PICKER -> ProfilesScreen(
-                profiles = profiles,
-                activeProfileId = vm.activeProfile?.id,
-                editable = false,
-                selectable = vm.canSelectProfile,
-                onSelect = {
-                    vm.selectProfile(it)
-                    goMeter()
-                },
-                onEdit = {},
-                onDelete = {},
-                onBack = back,
-            )
-
             Screen.PROFILES -> ProfilesScreen(
                 profiles = profiles,
-                activeProfileId = vm.activeProfile?.id,
-                editable = vm.canEditProfiles,
-                selectable = vm.canSelectProfile,
+                activeProfileId = activeProfile?.id,
                 onSelect = {
                     vm.selectProfile(it)
-                    goMeter()
+                    // Выбор тарифа сразу возвращает к расчёту
+                    stack = listOf(Screen.CALC)
                 },
                 onEdit = {
                     editing = it
                     go(Screen.PROFILE_EDIT)
                 },
                 onDelete = vm::deleteProfile,
+                onBack = back,
+            )
+
+            Screen.SETTINGS -> SettingsScreen(
+                gpsEnabled = settings.gpsEnabled,
+                onGpsEnabledChange = { enabled ->
+                    vm.setGpsEnabled(enabled)
+                    if (enabled && !vm.hasLocationPermission()) onRequestLocationPermission()
+                },
+                onOpenProfiles = { go(Screen.PROFILES) },
+                onOpenServices = { go(Screen.SERVICE_PRICES) },
                 onBack = back,
             )
 
@@ -234,30 +157,6 @@ fun TaxiRoot(
                     )
                 }
             }
-
-            Screen.DEVICES -> DeviceScreen(
-                obd = obd,
-                devices = devices,
-                selectedAddress = settings.deviceAddress,
-                hasPermission = vm.hasBluetoothPermission(),
-                bluetoothOn = vm.isBluetoothOn(),
-                onRefresh = vm::refreshDevices,
-                onConnect = vm::connect,
-                onDisconnect = vm::disconnect,
-                onRequestPermissions = onRequestPermissions,
-                onBack = back,
-            )
-        }
-
-        if (summaryVisible && trip.state == TripState.FINISHED) {
-            TripSummaryDialog(
-                trip = trip,
-                onFinish = { payment ->
-                    vm.finishTrip(payment)
-                    // После расчёта — снова выбор тарифа под следующего клиента
-                    stack = listOf(Screen.MENU, Screen.METER, Screen.PROFILE_PICKER)
-                },
-            )
         }
     }
 }

@@ -1,10 +1,10 @@
 package com.taxi.meter
 
+import com.taxi.meter.data.CalcInput
 import com.taxi.meter.data.ExtraService
 import com.taxi.meter.data.Profile
 import com.taxi.meter.data.ServicePrices
 import com.taxi.meter.data.calculateFare
-import com.taxi.meter.obd.ElmSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -134,36 +134,49 @@ class FareTest {
     }
 
     @Test
-    fun `погрешность интегрирования не открывает лишний километр`() {
-        // Накопленное значение может быть на доли микрометра больше ровного
+    fun `погрешность double не открывает лишний километр`() {
+        // Ровное значение не должно превращаться в начатый километр
+        // из-за представления чисел с плавающей точкой
         assertEquals(0, profile.calculateFare(2.0000000001, 0).billedKm)
         assertEquals(1, profile.calculateFare(3.0000000001, 0).billedKm)
     }
 }
 
-class ObdParseTest {
+class CalcInputTest {
+
+    private val profile = Profile(
+        name = "Тест",
+        pricePerKm = 15.0,
+        pricePerIdleMinute = 2.0,
+        minPrice = 60.0,
+        minDistanceKm = 2.0,
+    )
 
     @Test
-    fun `скорость читается из ответа PID 010D`() {
-        assertEquals(64, ElmSession.parseSpeed("410D40"))
-        assertEquals(0, ElmSession.parseSpeed("410D00"))
-        // с пробелами и мусором от адаптера
-        assertEquals(87, ElmSession.parseSpeed("41 0D 57"))
+    fun `запятая с клавиатуры читается как точка`() {
+        assertEquals(12.4, CalcInput(distanceText = "12,4").distanceKm, 0.0001)
+        assertEquals(12.4, CalcInput(distanceText = "12.4").distanceKm, 0.0001)
     }
 
     @Test
-    fun `ошибки адаптера не превращаются в нулевую скорость`() {
-        assertNull(ElmSession.parseSpeed("NO DATA"))
-        assertNull(ElmSession.parseSpeed(""))
-        assertNull(ElmSession.parseSpeed("UNABLE TO CONNECT"))
-        assertNull(ElmSession.parseSpeed("?"))
+    fun `пустые и мусорные поля дают нули`() {
+        assertEquals(0.0, CalcInput().distanceKm, 0.0001)
+        assertEquals(0, CalcInput().idleMinutes)
+        assertEquals(0.0, CalcInput(distanceText = ".").distanceKm, 0.0001)
+        assertEquals(0, CalcInput(idleText = "-3").idleMinutes)
     }
 
     @Test
-    fun `обороты и пробег с обнуления парсятся`() {
-        // 0x0F 0xA0 = 4000 -> 1000 об/мин
-        assertEquals(1000, ElmSession.parseRpm("410C0FA0"))
-        // 0x01 0x2C = 300 км
-        assertEquals(300, ElmSession.parseDistanceSinceClear("4131012C"))
+    fun `введённые минуты ожидания считаются целиком`() {
+        val input = CalcInput(distanceText = "10", idleText = "5")
+        assertEquals(300L, input.idleSeconds)
+        // 60 + 8 км * 15 + 5 мин * 2 = 190
+        assertEquals(190.0, input.fare(profile, ServicePrices())!!.total, 0.001)
+    }
+
+    @Test
+    fun `без тарифа расчёта нет`() {
+        assertNull(CalcInput(distanceText = "10").fare(null, ServicePrices()))
     }
 }
+

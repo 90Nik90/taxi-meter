@@ -13,32 +13,41 @@ import com.taxi.meter.ui.theme.TaxiTheme
 
 class MainActivity : ComponentActivity() {
 
+    private var vm: MainViewModel? = null
+
+    /**
+     * Разрешение спрашивается не на старте, а когда водитель включает
+     * счётчик: до этого момента приложению местоположение не нужно.
+     */
     private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { /* результат читается напрямую через checkSelfPermission */ }
+    ) { granted ->
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) vm?.startMeter()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        askPermissions()
         setContent {
             TaxiTheme {
-                val vm: MainViewModel = viewModel()
-                TaxiRoot(vm = vm, onRequestPermissions = { askPermissions() })
+                val model: MainViewModel = viewModel()
+                vm = model
+                TaxiRoot(
+                    vm = model,
+                    onRequestLocationPermission = { askLocation() },
+                )
             }
         }
     }
 
-    private fun askPermissions() {
+    private fun askLocation() {
         val needed = buildList {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                add(Manifest.permission.BLUETOOTH_CONNECT)
-                add(Manifest.permission.BLUETOOTH_SCAN)
-            }
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.ACCESS_COARSE_LOCATION)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-        if (needed.isNotEmpty()) requestPermissions.launch(needed.toTypedArray())
+        requestPermissions.launch(needed.toTypedArray())
     }
 }
