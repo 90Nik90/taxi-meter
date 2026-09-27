@@ -23,13 +23,33 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Unit tests
-        run: gradle test --no-daemon
+      - name: Build
+        run: |
+          set -o pipefail
+          gradle test assembleDebug --no-daemon --console=plain 2>&1 | tee build.log
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+      # Ошибки компилятора кладём в аннотацию запуска: полный лог доступен
+      # только с токеном, а аннотации читаются через открытый API.
+      - name: Report build errors
+        if: failure()
+        run: |
+          MSG=$(grep -E '^e: |^w: |FAILURE:|What went wrong|Caused by:|Execution failed' build.log | head -60 || true)
+          if [ -z "$MSG" ]; then MSG=$(tail -60 build.log); fi
+          MSG="${MSG//'%'/'%25'}"
+          MSG="${MSG//$'\n'/'%0A'}"
+          MSG="${MSG//$'\r'/'%0D'}"
+          echo "::error::$MSG"
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: taximeter-debug-apk
