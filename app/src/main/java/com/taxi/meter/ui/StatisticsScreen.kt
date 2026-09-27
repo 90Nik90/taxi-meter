@@ -283,12 +283,12 @@ private fun TotalsCard(stats: PeriodStats) {
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.Bottom,
         ) {
-            Text(
+            AutoFitText(
                 text = fmt(stats.revenue),
+                maxFontSize = 44.sp,
+                modifier = Modifier.weight(1f, fill = false),
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
-                fontSize = 44.sp,
-                maxLines = 1,
                 color = MeterColors.accent,
             )
             Text(
@@ -597,18 +597,17 @@ private fun MiniTile(label: String, value: String, modifier: Modifier = Modifier
             .padding(vertical = 8.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
+        AutoFitText(
             text = label,
-            fontSize = 9.sp,
-            maxLines = 1,
+            maxFontSize = 9.sp,
+            minFontSize = 7.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
+        AutoFitText(
             text = value,
+            maxFontSize = 17.sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            fontSize = 17.sp,
-            maxLines = 1,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }

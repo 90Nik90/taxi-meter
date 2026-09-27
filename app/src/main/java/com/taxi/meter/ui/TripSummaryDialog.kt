@@ -68,11 +68,12 @@ fun TripSummaryDialog(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    Text(
+                    AutoFitText(
                         text = fmt(fare.total),
+                        maxFontSize = 40.sp,
+                        modifier = Modifier.weight(1f, fill = false),
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 40.sp,
                         color = MeterColors.accent,
                     )
                     Spacer(Modifier.width(6.dp))

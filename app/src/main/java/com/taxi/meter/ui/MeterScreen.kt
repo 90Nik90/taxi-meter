@@ -235,12 +235,12 @@ private fun BigReadout(label: String, value: String, unit: String) {
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.Bottom,
         ) {
-            Text(
+            AutoFitText(
                 text = value,
+                maxFontSize = 60.sp,
+                modifier = Modifier.weight(1f, fill = false),
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
-                fontSize = 60.sp,
-                maxLines = 1,
                 color = MeterColors.accent,
             )
             Spacer(Modifier.width(8.dp))
@@ -336,6 +336,11 @@ private fun BigButton(
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(8.dp))
-        Text(text, fontWeight = FontWeight.Bold)
+        AutoFitText(
+            text = text,
+            maxFontSize = 15.sp,
+            modifier = Modifier.weight(1f, fill = false),
+            fontWeight = FontWeight.Bold,
+        )
     }
 }

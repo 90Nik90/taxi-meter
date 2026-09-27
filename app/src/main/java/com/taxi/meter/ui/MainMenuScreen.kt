@@ -118,11 +118,10 @@ private fun StartTripLabel() {
                 .fillMaxWidth(0.67f)
                 .aspectRatio(2f),
         )
-        Text(
+        AutoFitText(
             text = "ПОЧАТИ ПОЇЗДКУ",
+            maxFontSize = TRIP_LABEL_SIZE,
             fontWeight = FontWeight.Bold,
-            fontSize = TRIP_LABEL_SIZE,
-            maxLines = 1,
         )
     }
 }
@@ -144,16 +143,15 @@ private fun ActiveTripLabel(trip: TripSnapshot) {
                 .fillMaxWidth(0.5f)
                 .aspectRatio(2f),
         )
-        Text(
+        AutoFitText(
             text = when (trip.state) {
                 TripState.PAUSED -> "ПАУЗА · ПРОСТІЙ"
                 TripState.FINISHED -> "ЗАВЕРШЕНА"
                 else -> "ПОЇЗДКА ТРИВАЄ"
             },
+            maxFontSize = TRIP_LABEL_SIZE,
             fontWeight = FontWeight.Bold,
-            fontSize = TRIP_LABEL_SIZE,
             letterSpacing = 0.04.em,
-            maxLines = 1,
         )
         TripValue("${fmt(trip.fare?.total ?: 0.0)} грн")
         TripValue("${fmt(trip.distanceKm)} км")
@@ -163,12 +161,11 @@ private fun ActiveTripLabel(trip: TripSnapshot) {
 
 @Composable
 private fun TripValue(text: String) {
-    Text(
+    AutoFitText(
         text = text,
+        maxFontSize = TRIP_LABEL_SIZE,
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Bold,
-        fontSize = TRIP_LABEL_SIZE,
-        maxLines = 1,
     )
 }
 
