@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -54,3 +56,15 @@ jobs:
         with:
           name: taximeter-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+
+      # Артефакты качаются только под логином и живут 90 дней. Релиз с
+      # постоянным тегом latest даёт прямую ссылку, которая не меняется.
+      - name: Publish release
+        if: success() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest app/build/outputs/apk/debug/app-debug.apk \
+            --title "Таксометр — свіжа збірка" \
+            --notes "APK зібрано автоматично зі збірки ${{ github.run_number }}."
