@@ -120,8 +120,18 @@ class GpsSource(private val context: Context) {
         val accuracy = if (location.hasAccuracy()) location.accuracy else 0f
         lastAccuracyM = accuracy.toInt()
 
-        // Грубые точки только портят расчёт: в городе между высотками
-        // погрешность легко уходит за сотню метров.
+        // Время самой точки, а не момент её получения: система охотно
+        // отдаёт первой залежавшуюся точку из кеша, и если считать её
+        // свежей, она вместе со следующей даст выдуманную скорость.
+        val nowMs = location.elapsedRealtimeNanos / 1_000_000L
+        if (SystemClock.elapsedRealtime() - nowMs > MAX_FIX_AGE_MS) {
+            rejectedCount++
+            return
+        }
+
+        // Грубые точки только портят расчёт: пока приёмник не поймал
+        // спутники, система подсовывает положение по вышкам и Wi-Fi
+        // с погрешностью в сотни метров — по ней километры не посчитать.
         if (accuracy > MAX_ACCURACY_M) {
             rejectedCount++
             onFixLost?.invoke()
@@ -129,7 +139,6 @@ class GpsSource(private val context: Context) {
             return
         }
 
-        val nowMs = SystemClock.elapsedRealtime()
         val previous = lastLocation
 
         val speedMs = when {
@@ -209,5 +218,8 @@ class GpsSource(private val context: Context) {
 
         /** Столько молчания — считаем, что сигнала нет, мс */
         const val SILENCE_MS = 5000L
+
+        /** Точка старше этого — из кеша, ей верить нельзя, мс */
+        const val MAX_FIX_AGE_MS = 10_000L
     }
 }
