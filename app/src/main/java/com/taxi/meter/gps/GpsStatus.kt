@@ -26,6 +26,12 @@ data class GpsStatus(
     val rejectedCount: Int = 0,
     /** Включена ли геолокация в самом телефоне */
     val locationEnabled: Boolean = true,
+    /** Включён ли именно спутниковый приёмник, а не только сеть */
+    val gpsProviderEnabled: Boolean = false,
     /** Секунд с последней принятой точки; -1 — точек ещё не было */
     val lastFixAgoSec: Int = -1,
+    /** Откуда пришла последняя точка: gps или fused */
+    val source: String = "",
+    /** Отказ подписки, если он был — его видно на экране */
+    val error: String? = null,
 )

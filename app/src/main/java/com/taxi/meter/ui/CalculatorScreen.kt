@@ -302,6 +302,10 @@ private fun SignalWarning(gps: GpsStatus) {
         !gps.locationEnabled ->
             "Геолокація вимкнена в телефоні — увімкніть її у шторці"
 
+        !gps.gpsProviderEnabled ->
+            "Супутниковий приймач вимкнено — у налаштуваннях місцезнаходження " +
+                "виберіть режим «Висока точність»"
+
         gps.signal == GpsSignal.WEAK && gps.accuracyM > 0 ->
             "Сигнал занадто слабкий (похибка ${gps.accuracyM} м) — кілометри не рахуються"
 
@@ -329,9 +333,12 @@ private fun SignalWarning(gps: GpsStatus) {
         Text(
             text = buildString {
                 append("точок: ${gps.fixCount}")
+                if (gps.source.isNotEmpty()) append(" (${gps.source})")
                 if (gps.rejectedCount > 0) append(" · відкинуто: ${gps.rejectedCount}")
                 if (gps.accuracyM > 0) append(" · похибка: ${gps.accuracyM} м")
-                if (gps.lastFixAgoSec >= 0) append(" · останній збіг: ${gps.lastFixAgoSec} с тому")
+                if (gps.lastFixAgoSec >= 0) append(" · остання: ${gps.lastFixAgoSec} с тому")
+                append(" · приймач: ${if (gps.gpsProviderEnabled) "увімк" else "вимк"}")
+                gps.error?.let { append("\n$it") }
             },
             style = MaterialTheme.typography.labelSmall,
             fontFamily = FontFamily.Monospace,
