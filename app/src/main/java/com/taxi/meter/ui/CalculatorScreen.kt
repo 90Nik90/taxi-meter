@@ -52,6 +52,8 @@ import com.taxi.meter.data.CalcInput
 import com.taxi.meter.data.ExtraService
 import com.taxi.meter.data.Profile
 import com.taxi.meter.data.ServicePrices
+import com.taxi.meter.gps.GpsSignal
+import com.taxi.meter.gps.GpsStatus
 import com.taxi.meter.meter.MeterSnapshot
 import com.taxi.meter.meter.MeterState
 import com.taxi.meter.ui.theme.MeterColors
@@ -68,6 +70,7 @@ fun CalculatorScreen(
     servicePrices: ServicePrices,
     input: CalcInput,
     meter: MeterSnapshot,
+    gps: GpsStatus,
     gpsEnabled: Boolean,
     onDistanceChange: (String) -> Unit,
     onIdleChange: (String) -> Unit,
@@ -106,7 +109,7 @@ fun CalculatorScreen(
             },
         )
 
-        if (gpsEnabled && meter.isActive && !meter.hasFix) SignalWarning()
+        if (gpsEnabled && meter.isActive && gps.signal != GpsSignal.OK) SignalWarning(gps)
 
         Column(
             modifier = Modifier
@@ -289,22 +292,50 @@ private fun MeterButton(
  * Полоса о потере сигнала. Без неё обрыв виден только по замершему
  * счётчику: километры молча перестают набегать, и за рулём это легко
  * пропустить.
+ *
+ * Причины разные и чинятся по-разному, поэтому полоса называет ту,
+ * которая есть на самом деле, и показывает цифры приёмника.
  */
 @Composable
-private fun SignalWarning() {
-    Row(
+private fun SignalWarning(gps: GpsStatus) {
+    val text = when {
+        !gps.locationEnabled ->
+            "Геолокація вимкнена в телефоні — увімкніть її у шторці"
+
+        gps.signal == GpsSignal.WEAK && gps.accuracyM > 0 ->
+            "Сигнал занадто слабкий (похибка ${gps.accuracyM} м) — кілометри не рахуються"
+
+        gps.fixCount == 0 ->
+            "Чекаємо на супутники — кілометри поки не рахуються"
+
+        else ->
+            "Сигнал зник — кілометри не рахуються"
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .clip(MaterialTheme.shapes.medium)
             .background(MeterColors.wait.copy(alpha = 0.16f))
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Немає сигналу GPS — кілометри не рахуються",
+            text = text,
             style = MaterialTheme.typography.bodySmall,
             color = MeterColors.wait,
+        )
+        // Цифры приёмника: по ним видно, идёт ли поток координат вообще
+        Text(
+            text = buildString {
+                append("точок: ${gps.fixCount}")
+                if (gps.rejectedCount > 0) append(" · відкинуто: ${gps.rejectedCount}")
+                if (gps.accuracyM > 0) append(" · похибка: ${gps.accuracyM} м")
+                if (gps.lastFixAgoSec >= 0) append(" · останній збіг: ${gps.lastFixAgoSec} с тому")
+            },
+            style = MaterialTheme.typography.labelSmall,
+            fontFamily = FontFamily.Monospace,
+            color = MeterColors.wait.copy(alpha = 0.75f),
         )
     }
 }

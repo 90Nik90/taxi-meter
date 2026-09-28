@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.taxi.meter.MainActivity
 import com.taxi.meter.R
 import com.taxi.meter.TaxiApp
+import com.taxi.meter.gps.GpsSignal
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,9 +70,10 @@ class MeterService : Service() {
             PendingIntent.FLAG_IMMUTABLE,
         )
 
+        val signal = (application as TaxiApp).gps.status.value.signal
         val title = when {
             snapshot.state == MeterState.PAUSED -> "Очікування"
-            !snapshot.hasFix -> "Немає сигналу GPS"
+            signal != GpsSignal.OK -> "Немає сигналу GPS"
             else -> "Лічильник працює"
         }
 

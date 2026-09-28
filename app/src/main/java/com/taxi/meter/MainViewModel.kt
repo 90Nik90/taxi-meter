@@ -8,6 +8,7 @@ import com.taxi.meter.data.CalcInput
 import com.taxi.meter.data.ExtraService
 import com.taxi.meter.data.Profile
 import com.taxi.meter.data.ServicePrices
+import com.taxi.meter.gps.GpsStatus
 import com.taxi.meter.meter.MeterService
 import com.taxi.meter.meter.MeterSnapshot
 import com.taxi.meter.meter.MeterState
@@ -25,6 +26,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val profiles: StateFlow<List<Profile>> = taxi.storage.profiles
     val settings: StateFlow<AppSettings> = taxi.storage.settings
     val meter: StateFlow<MeterSnapshot> = taxi.meter.snapshot
+    val gps: StateFlow<GpsStatus> = taxi.gps.status
 
     private val _calc = MutableStateFlow(CalcInput())
     val calc: StateFlow<CalcInput> = _calc.asStateFlow()
@@ -42,6 +44,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             while (true) {
                 val snapshot = taxi.meter.snapshot.value
                 if (snapshot.isActive) {
+                    // Молчание приёмника ничем не сообщается — о нём
+                    // можно узнать только по часам.
+                    taxi.gps.refresh()
                     taxi.meter.tick()
                     pushMeterIntoCalc()
                 }

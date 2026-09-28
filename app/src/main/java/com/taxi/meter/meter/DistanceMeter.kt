@@ -25,8 +25,6 @@ data class MeterSnapshot(
     val idleMs: Long = 0,
     /** Текущая скорость, км/ч — для подписи на экране */
     val speedKmh: Int = 0,
-    /** Есть ли свежие координаты */
-    val hasFix: Boolean = false,
 ) {
     val isActive: Boolean get() = state == MeterState.RUNNING || state == MeterState.PAUSED
 
@@ -62,7 +60,6 @@ class DistanceMeter {
     private var lastSampleMs = 0L
 
     private var speedKmh = 0
-    private var hasFix = false
 
     fun start() = synchronized(lock) {
         km = 0.0
@@ -121,7 +118,6 @@ class DistanceMeter {
      * @param atMs метка времени, SystemClock.elapsedRealtime()
      */
     fun onSpeedSample(kmh: Double, atMs: Long) = synchronized(lock) {
-        hasFix = true
         speedKmh = kmh.roundToInt()
 
         if (state != MeterState.RUNNING) {
@@ -148,7 +144,6 @@ class DistanceMeter {
 
     /** Сигнал пропал: интегрировать через разрыв нельзя. */
     fun onFixLost() = synchronized(lock) {
-        hasFix = false
         lastSpeed = null
         speedKmh = 0
         publish()
@@ -167,7 +162,6 @@ class DistanceMeter {
             distanceKm = km,
             idleMs = idle,
             speedKmh = speedKmh,
-            hasFix = hasFix,
         )
     }
 
