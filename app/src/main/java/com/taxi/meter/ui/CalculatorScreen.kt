@@ -166,6 +166,7 @@ fun CalculatorScreen(
                 MeterControls(
                     state = meter.state,
                     speedKmh = meter.speedKmh,
+                    enabled = profile != null,
                     onStart = {
                         focus.clearFocus()
                         onStartMeter()
@@ -213,6 +214,7 @@ fun CalculatorScreen(
                         focus.clearFocus()
                         onSave()
                     },
+                    enabled = profile != null,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
@@ -260,13 +262,14 @@ fun CalculatorScreen(
 }
 
 /**
- * Кнопки счётчика. В покое одна широкая «Почати відлік», в работе —
+ * Кнопки счётчика. В покое одна широкая «Почати поїздку», в работе —
  * пауза и стоп, на паузе — продовжити и стоп.
  */
 @Composable
 private fun MeterControls(
     state: MeterState,
     speedKmh: Int,
+    enabled: Boolean,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -276,10 +279,11 @@ private fun MeterControls(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             when (state) {
                 MeterState.IDLE -> MeterButton(
-                    text = "ПОЧАТИ ВІДЛІК",
+                    text = "ПОЧАТИ ПОЇЗДКУ",
                     icon = Icons.Filled.PlayArrow,
                     color = MeterColors.go,
                     onClick = onStart,
+                    enabled = enabled,
                     modifier = Modifier.weight(1f),
                 )
 
@@ -339,9 +343,11 @@ private fun MeterButton(
     color: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.height(56.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = color,
@@ -449,21 +455,23 @@ private fun TariffHeader(profile: Profile?, onClick: () -> Unit) {
             .clickable { onClick() },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (profile == null) {
+            ErrorBox("Немає тарифу — торкніться, щоб додати.")
+            return@Column
+        }
         Text(
-            text = profile?.name ?: "Немає тарифів",
+            text = profile.name,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
         )
-        if (profile != null) {
-            Text(
-                text = "${fmt(profile.pricePerKm)} грн/км · мін. ${fmt(profile.minPrice)} грн " +
-                    "до ${fmt(profile.minDistanceKm, 1)} км",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
+        Text(
+            text = "${fmt(profile.pricePerKm)} грн/км · мін. ${fmt(profile.minPrice)} грн " +
+                "до ${fmt(profile.minDistanceKm, 1)} км",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

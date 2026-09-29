@@ -49,11 +49,17 @@ class Storage(context: Context) {
             return list.firstOrNull { it.id == id } ?: list.firstOrNull()
         }
 
+    /**
+     * Тарифы из хранилища.
+     *
+     * Заводские подставляются только при первом запуске. Пустой
+     * сохранённый список — это выбор водителя: он удалил всё, и
+     * возвращать заводские нельзя, иначе удалить их невозможно.
+     */
     private fun loadProfiles(): List<Profile> {
         val raw = prefs.getString(KEY_PROFILES, null) ?: return defaultProfiles()
         return runCatching { json.decodeFromString<List<Profile>>(raw) }
             .getOrElse { defaultProfiles() }
-            .ifEmpty { defaultProfiles() }
     }
 
     private fun loadSettings(): AppSettings {
@@ -80,8 +86,7 @@ class Storage(context: Context) {
     }
 
     fun deleteProfile(id: String) {
-        val list = _profiles.value.filterNot { it.id == id }
-        persistProfiles(list.ifEmpty { defaultProfiles() })
+        persistProfiles(_profiles.value.filterNot { it.id == id })
         if (_settings.value.activeProfileId == id) {
             updateSettings { it.copy(activeProfileId = _profiles.value.firstOrNull()?.id) }
         }

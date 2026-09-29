@@ -64,7 +64,7 @@ fun SettingsScreen(
             SwitchRow(
                 title = "Лічильник по GPS",
                 subtitle = "Відстань рахується сама під час поїздки — " +
-                    "на калькуляторі з’являються «Почати відлік» і «Стоп»",
+                    "на калькуляторі з’являються «Почати поїздку» і «Стоп»",
                 checked = gpsEnabled,
                 onCheckedChange = onGpsEnabledChange,
             )

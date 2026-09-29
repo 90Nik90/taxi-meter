@@ -261,6 +261,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * молчит, и километры не набегают.
      */
     fun startMeter(): Boolean {
+        // Без тарифа считать нечего: сумма всё равно не посчитается
+        if (taxi.storage.activeProfile == null) {
+            _toast.value = ToastMessage("Створіть тарифний профіль", isError = true)
+            return false
+        }
         if (!taxi.gps.hasPermission()) {
             _toast.value = ToastMessage("Дозвольте доступ до місцезнаходження", isError = true)
             return false

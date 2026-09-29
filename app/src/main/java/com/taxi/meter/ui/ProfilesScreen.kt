@@ -86,6 +86,20 @@ fun ProfilesScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (profiles.isEmpty()) {
+                item {
+                    SectionCard {
+                        Text("Тарифів немає", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "Додайте тариф кнопкою внизу — без нього " +
+                                "калькулятор не порахує вартість.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             items(profiles, key = { it.id }) { profile ->
                 ProfileRow(
                     profile = profile,

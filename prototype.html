@@ -312,7 +312,8 @@
     cursor: pointer;
   }
 
-  .meterbtn:active { transform: translateY(1px); }
+  .meterbtn:disabled { opacity: .4; cursor: default; }
+  .meterbtn:not(:disabled):active { transform: translateY(1px); }
 
   .coarsebar {
     display: flex;
@@ -718,7 +719,9 @@
       const raw = localStorage.getItem(LS);
       if (!raw) return null;
       const v = JSON.parse(raw);
-      if (!v || !Array.isArray(v.profiles) || !v.profiles.length) return null;
+      // Пустой список тарифов — это выбор водителя, а не испорченное
+      // сохранение: заводские возвращать не нужно.
+      if (!v || !Array.isArray(v.profiles)) return null;
       // Сохранения до выноса услуг в общие настройки
       if (!v.servicePrices) v.servicePrices = defaultServicePrices();
       SERVICES.forEach(s => {
@@ -1185,6 +1188,8 @@
     },
 
     startMeter() {
+      // Без тарифа считать нечего: сумма всё равно не посчитается
+      if (!activeProfile()) { toast('Створіть тарифний профіль', 'error'); return; }
       S.meter = {
         state: 'RUNNING', km: 0, coarseKm: 0, idleMs: 0,
         speed: DEMO_SPEED_KMH, coarse: false, startedAt: Date.now()
@@ -1289,9 +1294,12 @@
     confirmDelete() {
       const id = S.pendingDelete;
       S.pendingDelete = null;
+      // Пустой список — это выбор водителя, а не поломка: заводские
+      // тарифы возвращать не нужно, иначе удалить их невозможно.
       S.profiles = S.profiles.filter(p => p.id !== id);
-      if (!S.profiles.length) S.profiles = defaults();
-      if (!S.profiles.some(p => p.id === S.activeId)) S.activeId = S.profiles[0].id;
+      if (!S.profiles.some(p => p.id === S.activeId)) {
+        S.activeId = S.profiles.length ? S.profiles[0].id : null;
+      }
       save(); render();
     },
   };
@@ -1631,7 +1639,7 @@
         ${toggle(
           'Лічильник по GPS',
           'Відстань рахується сама під час поїздки — на калькуляторі ' +
-            'з’являються «Почати відлік» і «Стоп»',
+            'з’являються «Почати поїздку» і «Стоп»',
           S.gpsEnabled, 'toggleGps')}
 
         ${S.gpsEnabled ? toggle(
@@ -1648,7 +1656,7 @@
         ${S.gpsEnabled ? toggle(
           'Імітувати глушіння супутників',
           'Тільки в прототипі: у застосунку такої кнопки немає. ' +
-            'Увімкніть під час відліку, щоб побачити, як працює приблизний режим',
+            'Увімкніть під час поїздки, щоб побачити, як працює приблизний режим',
           S.jammed, 'toggleJamming') : ''}
 
         <div style="height:12px"></div>
@@ -1664,11 +1672,12 @@
     const c = S.calc;
     const st = S.meter.state;
 
-    // Пока счётчик работает, поля заполняет он: руками их не трогаем,
-    // иначе набранное затрётся следующей выборкой.
     // Со счётчиком поля заполняет он: руками их не трогаем совсем,
     // а до старта в них стоят нули, а не пустота.
     const locked = S.gpsEnabled;
+
+    // Без тарифа считать нечего, поэтому кнопки не работают
+    const noTariff = !p;
 
     const field = (id, label, unit, val, zero) => `<div class="mfield">
       <span class="flabel">${label}</span>
@@ -1693,11 +1702,14 @@
     </div>` + warn
       + `<div class="body-scroll" style="gap:14px">
         <div>
-          <div class="profile-name" data-act="go" data-arg="profiles">${
-            p ? esc(p.name) : 'Немає тарифів'}</div>
-          ${p ? `<div class="profile-sub" data-act="go" data-arg="profiles">${
-            fmt(p.pricePerKm)} грн/км · мін. ${fmt(p.minPrice)} грн до ${
-            fmt(p.minDistanceKm, 1)} км</div>` : ''}
+          ${noTariff
+            ? `<div class="errbox" data-act="go" data-arg="profiles" style="cursor:pointer">
+                 Немає тарифу — торкніться, щоб додати.
+               </div>`
+            : `<div class="profile-name" data-act="go" data-arg="profiles">${esc(p.name)}</div>
+               <div class="profile-sub" data-act="go" data-arg="profiles">${
+                 fmt(p.pricePerKm)} грн/км · мін. ${fmt(p.minPrice)} грн до ${
+                 fmt(p.minDistanceKm, 1)} км</div>`}
         </div>
 
         <div class="card odometer">
@@ -1708,7 +1720,7 @@
         ${field('cDist', 'Відстань', 'км', c.distanceText, '0.00')}
         ${field('cIdle', 'Очікування', 'хв', c.idleText, '0')}
 
-        ${S.gpsEnabled ? meterControls(st) : ''}
+        ${S.gpsEnabled ? meterControls(st, noTariff) : ''}
 
         <div class="card">
           <div class="label">ДОДАТКОВІ ПОСЛУГИ</div>
@@ -1750,22 +1762,23 @@
                  відмітьте оплату, запис оновиться</span></div>`
             : '')
           : `<button class="meterbtn" style="background:var(--m-go);height:56px"
-               data-act="saveTrip">ЗБЕРЕГТИ ПОЇЗДКУ</button>`}
+               data-act="saveTrip"${noTariff ? ' disabled' : ''}>ЗБЕРЕГТИ ПОЇЗДКУ</button>`}
         <button class="resetbtn" data-act="resetCalc"${
           (calcEmpty() && S.meter.state === 'IDLE') ? ' disabled' : ''}>СКИНУТИ</button>
       </div>`;
   }
 
   /**
-   * Кнопки счётчика. В покое одна широкая «Почати відлік», в работе —
+   * Кнопки счётчика. В покое одна широкая «Почати поїздку», в работе —
    * очікування и стоп, на паузе — поїхали и стоп.
    */
-  function meterControls(state) {
+  function meterControls(state, disabled) {
     const btn = (text, color, act) =>
-      `<button class="meterbtn" style="background:${color}" data-act="${act}">${text}</button>`;
+      `<button class="meterbtn" style="background:${color}" data-act="${act}"${
+        disabled ? ' disabled' : ''}>${text}</button>`;
 
     const row = state === 'IDLE'
-      ? btn('ПОЧАТИ ВІДЛІК', 'var(--m-go)', 'startMeter')
+      ? btn('ПОЧАТИ ПОЇЗДКУ', 'var(--m-go)', 'startMeter')
       : state === 'RUNNING'
         ? btn('ОЧІКУВАННЯ', 'var(--m-wait)', 'pauseMeter') + btn('СТОП', 'var(--m-stop)', 'stopMeter')
         : btn('ПОЇХАЛИ', 'var(--m-go)', 'resumeMeter') + btn('СТОП', 'var(--m-stop)', 'stopMeter');
@@ -1786,6 +1799,11 @@
     // перехватывают нажатие на себя.
     return appbar('Тарифи', true)
       + `<div class="body-scroll">
+        ${S.profiles.length ? '' : `<div class="card">
+          <div style="font-size:17px;font-weight:500">Тарифів немає</div>
+          <div class="small">Додайте тариф кнопкою внизу — без нього
+            калькулятор не порахує вартість.</div>
+        </div>`}
         ${S.profiles.map(p => `
           <div class="card tap ${p.id === S.activeId ? 'sel' : ''}" data-act="selectProfile" data-arg="${p.id}">
             <div class="row">
