@@ -18,10 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.taxi.meter.MainViewModel
 import com.taxi.meter.data.Profile
+import com.taxi.meter.data.StatsPeriod
+import kotlinx.coroutines.delay
 
 private enum class Screen {
-    /** Калькулятор — главный экран: расстояние, ожидание, услуги */
+    /** Калькулятор — главный экран: расстояние, ожидание, услуги, оплата */
     CALC,
+
+    STATISTICS,
+
+    /** Список поездок за выбранный в статистике период */
+    TRIPS,
 
     /** Тарифы: выбрать, поправить шестерёнкой, удалить корзиной */
     PROFILES,
@@ -36,6 +43,7 @@ fun TaxiRoot(
 ) {
     val profiles by vm.profiles.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val trips by vm.trips.collectAsStateWithLifecycle()
     val calc by vm.calc.collectAsStateWithLifecycle()
     val meter by vm.meter.collectAsStateWithLifecycle()
     val gps by vm.gps.collectAsStateWithLifecycle()
@@ -53,6 +61,18 @@ fun TaxiRoot(
     val back = { if (stack.size > 1) stack = stack.dropLast(1) }
 
     var editing by remember { mutableStateOf<Profile?>(null) }
+
+    // Период статистики живёт выше экрана: он нужен и списку поездок
+    var statsPeriod by remember { mutableStateOf(StatsPeriod.DAY) }
+
+    // Часы для границ периодов статистики
+    var nowWallMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowWallMs = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
 
     val snackbar = remember { SnackbarHostState() }
 
@@ -88,7 +108,9 @@ fun TaxiRoot(
                     onDistanceChange = vm::setDistance,
                     onIdleChange = vm::setIdleMinutes,
                     onToggleService = vm::toggleService,
+                    onPaymentChange = vm::setPayment,
                     onReset = vm::resetCalc,
+                    onSave = { vm.saveTrip() },
                     onStartMeter = {
                         // Разрешение спрашиваем в момент, когда оно нужно:
                         // до первой поездки система о нём не спросит.
@@ -100,8 +122,26 @@ fun TaxiRoot(
                     onStopMeter = { vm.stopMeter() },
                     onOpenProfiles = { go(Screen.PROFILES) },
                     onOpenSettings = { go(Screen.SETTINGS) },
+                    onOpenStatistics = { go(Screen.STATISTICS) },
                 )
             }
+
+            Screen.STATISTICS -> StatisticsScreen(
+                trips = trips,
+                period = statsPeriod,
+                nowWallMs = nowWallMs,
+                onPeriodChange = { statsPeriod = it },
+                onOpenTrips = { go(Screen.TRIPS) },
+                onBack = back,
+            )
+
+            Screen.TRIPS -> TripsScreen(
+                trips = trips,
+                period = statsPeriod,
+                nowWallMs = nowWallMs,
+                onDeleteTrip = vm::deleteTrip,
+                onBack = back,
+            )
 
             Screen.PROFILES -> ProfilesScreen(
                 profiles = profiles,

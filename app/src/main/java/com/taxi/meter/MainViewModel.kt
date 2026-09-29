@@ -7,7 +7,10 @@ import com.taxi.meter.data.AppSettings
 import com.taxi.meter.data.CalcInput
 import com.taxi.meter.data.ExtraService
 import com.taxi.meter.data.Profile
+import com.taxi.meter.data.PaymentMethod
 import com.taxi.meter.data.ServicePrices
+import com.taxi.meter.data.TripRecord
+import com.taxi.meter.data.calculateFare
 import com.taxi.meter.gps.GpsStatus
 import com.taxi.meter.meter.MeterService
 import com.taxi.meter.meter.MeterSnapshot
@@ -25,6 +28,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val profiles: StateFlow<List<Profile>> = taxi.storage.profiles
     val settings: StateFlow<AppSettings> = taxi.storage.settings
+    val trips: StateFlow<List<TripRecord>> = taxi.storage.trips
     val meter: StateFlow<MeterSnapshot> = taxi.meter.snapshot
     val gps: StateFlow<GpsStatus> = taxi.gps.status
 
@@ -96,11 +100,72 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    fun setPayment(method: PaymentMethod?) {
+        _calc.value = _calc.value.copy(payment = method)
+    }
+
     fun resetCalc() {
         stopMeter(write = false)
         taxi.meter.reset()
         _calc.value = CalcInput()
     }
+
+    /**
+     * Сохранить посчитанную поездку в историю.
+     *
+     *  true, если запись прошла; false — если чего-то не хватает,
+     * и тогда причина уже показана сообщением.
+     */
+    fun saveTrip(): Boolean {
+        val profile = taxi.storage.activeProfile
+        if (profile == null) {
+            _toast.value = "Створіть тарифний профіль"
+            return false
+        }
+        val input = _calc.value
+        if (input.distanceKm <= 0.0) {
+            _toast.value = "Вкажіть відстань поїздки"
+            return false
+        }
+        val payment = input.payment
+        if (payment == null) {
+            _toast.value = "Виберіть спосіб оплати"
+            return false
+        }
+
+        val fare = profile.calculateFare(
+            distanceKm = input.distanceKm,
+            idleSeconds = input.idleSeconds,
+            services = input.services,
+            servicePrices = taxi.storage.settings.value.servicePrices,
+        )
+
+        // Поездку не замеряли по часам, поэтому обе отметки — момент
+        // записи. Момент записи ещё и ключ записи в истории.
+        val now = System.currentTimeMillis()
+        taxi.storage.addTrip(
+            TripRecord(
+                startedAtWallMs = now,
+                finishedAtWallMs = now,
+                distanceKm = fare.distanceKm,
+                runningMs = 0L,
+                idleMs = input.idleSeconds * 1000L,
+                total = fare.total,
+                profileName = profile.name,
+                services = input.services.map { it.title },
+                payment = payment.name,
+                servicesTotal = fare.servicesPart,
+                coarseKm = taxi.meter.snapshot.value.coarseKm,
+            )
+        )
+
+        _toast.value = "Збережено: ${String.format(Locale.US, "%.2f", fare.total)} грн"
+        resetCalc()
+        return true
+    }
+
+    /** Убрать поездку из истории и из статистики. */
+    fun deleteTrip(trip: TripRecord) = taxi.storage.deleteTrip(trip.finishedAtWallMs)
 
     // --- Счётчик ---------------------------------------------------------
 

@@ -14,6 +14,7 @@ data class CalcInput(
     /** Введённое время ожидания в целых минутах: «5» */
     val idleText: String = "",
     val services: Set<ExtraService> = emptySet(),
+    val payment: PaymentMethod? = null,
 ) {
     /** Расстояние; запятая с клавиатуры считается точкой. */
     val distanceKm: Double
@@ -27,7 +28,7 @@ data class CalcInput(
 
     /** Есть ли что сбрасывать. */
     val isEmpty: Boolean
-        get() = distanceKm <= 0.0 && idleMinutes == 0 && services.isEmpty()
+        get() = distanceKm <= 0.0 && idleMinutes == 0 && services.isEmpty() && payment == null
 
     fun fare(profile: Profile?, prices: ServicePrices): Fare? =
         profile?.calculateFare(distanceKm, idleSeconds, services, prices)

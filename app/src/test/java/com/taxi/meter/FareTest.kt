@@ -2,6 +2,7 @@ package com.taxi.meter
 
 import com.taxi.meter.data.CalcInput
 import com.taxi.meter.data.ExtraService
+import com.taxi.meter.data.PaymentMethod
 import com.taxi.meter.data.Profile
 import com.taxi.meter.data.ServicePrices
 import com.taxi.meter.data.calculateFare
@@ -177,6 +178,13 @@ class CalcInputTest {
     @Test
     fun `без тарифа расчёта нет`() {
         assertNull(CalcInput(distanceText = "10").fare(null, ServicePrices()))
+    }
+
+    @Test
+    fun `пустой ввод нечего скидывать`() {
+        assertTrue(CalcInput().isEmpty)
+        assertTrue(!CalcInput(distanceText = "1").isEmpty)
+        assertTrue(!CalcInput(payment = PaymentMethod.CASH).isEmpty)
     }
 }
 

@@ -18,6 +18,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
@@ -50,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.taxi.meter.data.CalcInput
 import com.taxi.meter.data.ExtraService
+import com.taxi.meter.data.PaymentMethod
 import com.taxi.meter.data.Profile
 import com.taxi.meter.data.ServicePrices
 import com.taxi.meter.gps.GpsSignal
@@ -75,13 +78,16 @@ fun CalculatorScreen(
     onDistanceChange: (String) -> Unit,
     onIdleChange: (String) -> Unit,
     onToggleService: (ExtraService) -> Unit,
+    onPaymentChange: (PaymentMethod?) -> Unit,
     onReset: () -> Unit,
+    onSave: () -> Unit,
     onStartMeter: () -> Unit,
     onPauseMeter: () -> Unit,
     onResumeMeter: () -> Unit,
     onStopMeter: () -> Unit,
     onOpenProfiles: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenStatistics: () -> Unit,
 ) {
     val fare = input.fare(profile, servicePrices)
     val focus = LocalFocusManager.current
@@ -100,8 +106,13 @@ fun CalculatorScreen(
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.background,
             ),
+            navigationIcon = {
+                IconButton(onClick = onOpenStatistics) {
+                    Icon(Icons.Filled.BarChart, contentDescription = "Статистика")
+                }
+            },
             // Тариф меняется нажатием на его название ниже, поэтому
-            // сверху остаётся только вход в настройки.
+            // справа остаётся только вход в настройки.
             actions = {
                 IconButton(onClick = onOpenSettings) {
                     Icon(Icons.Filled.Settings, contentDescription = "Налаштування")
@@ -181,26 +192,55 @@ fun CalculatorScreen(
                 onToggle = onToggleService,
             )
 
+            PaymentCard(selected = input.payment, onSelect = onPaymentChange)
+
             Spacer(Modifier.height(4.dp))
         }
 
-        Button(
-            onClick = {
-                focus.clearFocus()
-                onReset()
-            },
-            enabled = !input.isEmpty || meter.isActive,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .height(56.dp),
-            shape = MaterialTheme.shapes.large,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ),
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("СКИНУТИ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Button(
+                onClick = {
+                    focus.clearFocus()
+                    onSave()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = MaterialTheme.shapes.large,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MeterColors.go,
+                    contentColor = Color(0xFF101418),
+                ),
+            ) {
+                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
+                AutoFitText(
+                    text = "ЗБЕРЕГТИ ПОЇЗДКУ",
+                    maxFontSize = 16.sp,
+                    modifier = Modifier.weight(1f, fill = false),
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Button(
+                onClick = {
+                    focus.clearFocus()
+                    onReset()
+                },
+                enabled = !input.isEmpty || meter.isActive,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = MaterialTheme.shapes.large,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Text("СКИНУТИ", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
         }
     }
 }
@@ -529,6 +569,36 @@ private fun ServicesCard(
                     color = if (checked) MeterColors.accent
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+/** Способ оплаты обязателен: без него поездка не попадёт в статистику. */
+@Composable
+private fun PaymentCard(
+    selected: PaymentMethod?,
+    onSelect: (PaymentMethod?) -> Unit,
+) {
+    SectionCard {
+        Text(
+            text = "СПОСІБ ОПЛАТИ",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        PaymentMethod.entries.forEach { method ->
+            val checked = selected == method
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(if (checked) null else method) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = { onSelect(if (checked) null else method) },
+                )
+                Text(method.title, style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
