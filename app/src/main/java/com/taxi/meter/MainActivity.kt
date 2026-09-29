@@ -3,6 +3,7 @@ package com.taxi.meter
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,6 +15,9 @@ import com.taxi.meter.ui.theme.TaxiTheme
 class MainActivity : ComponentActivity() {
 
     private var vm: MainViewModel? = null
+
+    /** Когда приложение ушло в фон; 0 — ещё не уходило. */
+    private var leftAtMs = 0L
 
     /**
      * Разрешение спрашивается не на старте, а когда водитель включает
@@ -37,6 +41,21 @@ class MainActivity : ComponentActivity() {
                     onRequestLocationPermission = { askLocation() },
                 )
             }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        leftAtMs = SystemClock.elapsedRealtime()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Процесс мог и не умирать: после долгой паузы заход всё равно
+        // считается новым, и тариф выбирается заново.
+        if (leftAtMs > 0L) {
+            vm?.onReturnedFromBackground(SystemClock.elapsedRealtime() - leftAtMs)
+            leftAtMs = 0L
         }
     }
 

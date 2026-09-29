@@ -48,6 +48,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Ключ той самой записи; null — дописывать нечего. */
     private var lastSavedKey: Long? = null
 
+    /**
+     * Показать выбор тарифа: каждый новый заход начинается с него.
+     *
+     * При холодном старте модель создаётся заново, поэтому true здесь
+     * и означает «приложение только что открыли».
+     */
+    private val _pickTariff = MutableStateFlow(true)
+    val pickTariff: StateFlow<Boolean> = _pickTariff.asStateFlow()
+
     /** Попап со способом оплаты после «Стоп». */
     private val _paymentDialog = MutableStateFlow(false)
     val paymentDialog: StateFlow<Boolean> = _paymentDialog.asStateFlow()
@@ -320,7 +329,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /** Экран выбора тарифа показан — флаг больше не нужен. */
+    fun tariffPickShown() {
+        _pickTariff.value = false
+    }
+
+    /**
+     * Вернулись из фона. Короткая отлучка — это та же смена, а вот
+     * после долгой паузы водитель обычно начинает новую поездку,
+     * и тариф стоит выбрать заново.
+     *
+     * Полчаса — не требование системы, а общепринятая мера: столько
+     * же держит сессию Firebase Analytics.
+     */
+    fun onReturnedFromBackground(awayMs: Long) {
+        if (awayMs < SESSION_TIMEOUT_MS) return
+        if (taxi.meter.snapshot.value.isActive) return
+        _pickTariff.value = true
+    }
+
     fun consumeToast() {
         _toast.value = null
+    }
+
+    private companion object {
+        /** Столько отсутствия — и заход считается новым, мс */
+        const val SESSION_TIMEOUT_MS = 30L * 60 * 1000
     }
 }

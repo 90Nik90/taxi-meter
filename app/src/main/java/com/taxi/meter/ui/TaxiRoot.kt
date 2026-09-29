@@ -55,6 +55,7 @@ fun TaxiRoot(
     val toast by vm.toast.collectAsStateWithLifecycle()
     val tripSaved by vm.tripSaved.collectAsStateWithLifecycle()
     val paymentDialog by vm.paymentDialog.collectAsStateWithLifecycle()
+    val pickTariff by vm.pickTariff.collectAsStateWithLifecycle()
 
     // Активный тариф читается из хранилища; список и настройки собраны
     // выше, поэтому его смена приводит к перерисовке.
@@ -81,6 +82,15 @@ fun TaxiRoot(
         while (true) {
             nowWallMs = System.currentTimeMillis()
             delay(1000)
+        }
+    }
+
+    // Каждый новый заход начинается с выбора тарифа: водитель садится
+    // за смену и первым делом решает, по какому тарифу везёт.
+    LaunchedEffect(pickTariff) {
+        if (pickTariff) {
+            stack = listOf(Screen.CALC, Screen.PROFILES)
+            vm.tariffPickShown()
         }
     }
 

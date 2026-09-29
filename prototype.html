@@ -748,8 +748,13 @@
   const stored = load();
 
   const S = {
-    /* Стек экранов: «назад» всегда возвращает туда, откуда пришли */
-    stack: ['calc'],
+    /**
+     * Стек экранов: «назад» всегда возвращает туда, откуда пришли.
+     *
+     * Каждый новый заход начинается с выбора тарифа: водитель садится
+     * за смену и первым делом решает, по какому тарифу везёт.
+     */
+    stack: ['calc', 'profiles'],
     profiles: stored ? stored.profiles : defaults(),
     activeId: stored ? stored.activeId : 'p1',
     editing: null,
