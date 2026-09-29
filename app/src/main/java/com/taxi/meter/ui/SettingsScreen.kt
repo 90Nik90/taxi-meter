@@ -22,7 +22,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.taxi.meter.BuildConfig
 
 /** Настройки: счётчик по GPS, тарифы и доплаты за услуги. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,6 +87,15 @@ fun SettingsScreen(
                 title = "Доплати за послуги",
                 subtitle = "Діти, тварини, багаж у салоні",
                 onClick = onOpenServices,
+            )
+
+            // Номер сборки: без него не понять, что стоит в телефоне
+            Text(
+                text = "Версія ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
             )
         }
     }

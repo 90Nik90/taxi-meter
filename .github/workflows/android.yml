@@ -28,7 +28,8 @@ jobs:
       - name: Build
         run: |
           set -o pipefail
-          gradle test assembleDebug --no-daemon --console=plain 2>&1 | tee build.log
+          gradle test assembleDebug -PbuildNumber=${{ github.run_number }} \
+            --no-daemon --console=plain 2>&1 | tee build.log
 
       # Ошибки компилятора кладём в аннотацию запуска: полный лог доступен
       # только с токеном, а аннотации читаются через открытый API.
