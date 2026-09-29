@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.Locale
 
+/** Сообщение внизу экрана; предупреждения показываются красным. */
+data class ToastMessage(val text: String, val isError: Boolean = false)
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val taxi = app as TaxiApp
@@ -35,8 +38,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _calc = MutableStateFlow(CalcInput())
     val calc: StateFlow<CalcInput> = _calc.asStateFlow()
 
-    private val _toast = MutableStateFlow<String?>(null)
-    val toast: StateFlow<String?> = _toast.asStateFlow()
+    private val _toast = MutableStateFlow<ToastMessage?>(null)
+    val toast: StateFlow<ToastMessage?> = _toast.asStateFlow()
 
     /** Поездка уже записана счётчиком и правки дописываются в неё. */
     private val _tripSaved = MutableStateFlow(false)
@@ -44,6 +47,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ключ той самой записи; null — дописывать нечего. */
     private var lastSavedKey: Long? = null
+
+    /** Попап со способом оплаты после «Стоп». */
+    private val _paymentDialog = MutableStateFlow(false)
+    val paymentDialog: StateFlow<Boolean> = _paymentDialog.asStateFlow()
+
+    /** Реальное начало поездки по часам; 0 — считали руками. */
+    private var meterStartedAtWallMs = 0L
 
     val activeProfile: Profile?
         get() = taxi.storage.activeProfile
@@ -119,6 +129,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         stopMeter(write = false)
         taxi.meter.reset()
         _calc.value = CalcInput()
+        _paymentDialog.value = false
+        meterStartedAtWallMs = 0L
         forgetSavedTrip()
     }
 
@@ -131,22 +143,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun saveTrip(): Boolean {
         val profile = taxi.storage.activeProfile
         if (profile == null) {
-            _toast.value = "Створіть тарифний профіль"
+            _toast.value = ToastMessage("Створіть тарифний профіль", isError = true)
             return false
         }
         val input = _calc.value
         if (input.distanceKm <= 0.0) {
-            _toast.value = "Вкажіть відстань поїздки"
+            _toast.value = ToastMessage("Вкажіть відстань поїздки", isError = true)
             return false
         }
         if (input.payment == null) {
-            _toast.value = "Виберіть спосіб оплати"
+            _toast.value = ToastMessage("Виберіть спосіб оплати", isError = true)
             return false
         }
 
-        val record = buildRecord(System.currentTimeMillis(), profile, input)
+        val record = buildRecord(System.currentTimeMillis(), profile, input, metered = false)
         taxi.storage.addTrip(record)
-        _toast.value = "Збережено: ${String.format(Locale.US, "%.2f", record.total)} грн"
+        _toast.value = ToastMessage("Збережено: ${String.format(Locale.US, "%.2f", record.total)} грн")
         resetCalc()
         return true
     }
@@ -155,17 +167,64 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Автосохранение по «Стоп»: поездку, посчитанную счётчиком,
      * водителю не нужно сохранять руками.
      */
-    private fun recordTrip() {
+    /**
+     * Завершить поездку из попапа: записать в историю и закрыть окно.
+     *
+     * Без способа оплаты кнопка неактивна, так что сюда мы попадаем
+     * только с отметкой.
+     */
+    fun finishTrip() {
+        _paymentDialog.value = false
+        recordTrip(metered = true)
+    }
+
+    private fun recordTrip(metered: Boolean) {
         val profile = taxi.storage.activeProfile ?: return
         val input = _calc.value
         if (input.distanceKm <= 0.0) return
 
         val key = System.currentTimeMillis()
-        val record = buildRecord(key, profile, input)
+        val record = buildRecord(key, profile, input, metered)
         lastSavedKey = key
         taxi.storage.addTrip(record)
         _tripSaved.value = true
-        _toast.value = "Збережено: ${String.format(Locale.US, "%.2f", record.total)} грн"
+        _toast.value = ToastMessage("Збережено: ${String.format(Locale.US, "%.2f", record.total)} грн")
+    }
+
+    /**
+     * Запись из того, что сейчас в калькуляторе.
+     *
+     * У поездки со счётчиком есть настоящие начало и конец; у расчёта
+     * руками — только момент записи. Признак передаётся явно: состояние
+     * счётчика доживает до следующего расчёта и соврало бы.
+     */
+    private fun buildRecord(
+        key: Long,
+        profile: Profile,
+        input: CalcInput,
+        metered: Boolean,
+    ): TripRecord {
+        val fare = profile.calculateFare(
+            distanceKm = input.distanceKm,
+            idleSeconds = input.idleSeconds,
+            services = input.services,
+            servicePrices = taxi.storage.settings.value.servicePrices,
+        )
+        return TripRecord(
+            startedAtWallMs = if (metered && meterStartedAtWallMs > 0L) meterStartedAtWallMs
+            else key,
+            finishedAtWallMs = key,
+            distanceKm = fare.distanceKm,
+            runningMs = 0L,
+            idleMs = input.idleSeconds * 1000L,
+            total = fare.total,
+            profileName = profile.name,
+            services = input.services.map { it.title },
+            payment = input.payment?.name ?: "",
+            servicesTotal = fare.servicesPart,
+            coarseKm = taxi.meter.snapshot.value.coarseKm,
+            metered = metered,
+        )
     }
 
     /**
@@ -177,40 +236,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun syncLastTrip() {
         val key = lastSavedKey ?: return
         val profile = taxi.storage.activeProfile
-        val updated = profile != null &&
-            taxi.storage.replaceTrip(key, buildRecord(key, profile, _calc.value))
+        val previous = taxi.storage.trips.value.firstOrNull { it.finishedAtWallMs == key }
+        val updated = profile != null && previous != null && taxi.storage.replaceTrip(
+            key,
+            buildRecord(key, profile, _calc.value, previous.metered),
+        )
         if (!updated) forgetSavedTrip()
     }
 
     private fun forgetSavedTrip() {
         lastSavedKey = null
         _tripSaved.value = false
-    }
-
-    /**
-     * Поездку не замеряли по часам, поэтому обе отметки — момент записи.
-     * Момент записи ещё и её ключ в истории.
-     */
-    private fun buildRecord(key: Long, profile: Profile, input: CalcInput): TripRecord {
-        val fare = profile.calculateFare(
-            distanceKm = input.distanceKm,
-            idleSeconds = input.idleSeconds,
-            services = input.services,
-            servicePrices = taxi.storage.settings.value.servicePrices,
-        )
-        return TripRecord(
-            startedAtWallMs = key,
-            finishedAtWallMs = key,
-            distanceKm = fare.distanceKm,
-            runningMs = 0L,
-            idleMs = input.idleSeconds * 1000L,
-            total = fare.total,
-            profileName = profile.name,
-            services = input.services.map { it.title },
-            payment = input.payment?.name ?: "",
-            servicesTotal = fare.servicesPart,
-            coarseKm = taxi.meter.snapshot.value.coarseKm,
-        )
     }
 
     /** Убрать поездку из истории и из статистики. */
@@ -226,10 +262,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun startMeter(): Boolean {
         if (!taxi.gps.hasPermission()) {
-            _toast.value = "Дозвольте доступ до місцезнаходження"
+            _toast.value = ToastMessage("Дозвольте доступ до місцезнаходження", isError = true)
             return false
         }
         forgetSavedTrip()
+        meterStartedAtWallMs = System.currentTimeMillis()
         taxi.meter.start()
         taxi.gps.setCoarseEnabled(taxi.storage.settings.value.coarseEnabled)
         taxi.gps.start()
@@ -256,8 +293,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         MeterService.stop(getApplication())
         if (write) {
             writeToCalc(result)
-            // Поездку, посчитанную счётчиком, сохраняем сами
-            recordTrip()
+            // Поездка уходит в историю не сразу: сперва водитель
+            // отмечает, чем с ним расплатились.
+            if (taxi.storage.activeProfile != null && _calc.value.distanceKm > 0.0) {
+                _paymentDialog.value = true
+            }
         }
     }
 

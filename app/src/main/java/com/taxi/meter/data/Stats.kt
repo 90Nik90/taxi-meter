@@ -1,20 +1,27 @@
 package com.taxi.meter.data
 
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /** Период, за который считается статистика. */
-enum class StatsPeriod(val title: String, val hint: String, val days: Int) {
-    DAY("День", "з початку доби", 1),
-    WEEK("Тиждень", "останні 7 днів", 7),
-    MONTH("Місяць", "останні 30 днів", 30),
-    ALL("Усе", "усі збережені поїздки", 0),
+enum class StatsPeriod(val title: String, val hint: String) {
+    DAY("День", "з початку доби"),
+    WEEK("Тиждень", "поточний тиждень, Пн — Нд"),
+    MONTH("Місяць", "поточний місяць"),
+    ALL("Усе", "усі збережені поїздки"),
 }
 
 /** Столбик графика выручки. */
-data class Bucket(val label: String, val value: Double, val emphasized: Boolean = false)
+data class Bucket(
+    val label: String,
+    val value: Double,
+    /** Начало дня — нужно для подписи над выбранным столбиком */
+    val dayMs: Long,
+    val emphasized: Boolean = false,
+)
 
 /** Доля тарифа в периоде. */
 data class ProfileSlice(val name: String, val trips: Int, val revenue: Double)
@@ -60,10 +67,21 @@ private fun startOfDayMs(date: LocalDate): Long =
 private val weekdays = arrayOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд")
 
 /** Начало периода по стенным часам; для «Всё» — ноль. */
+/**
+ * Начало периода по стенным часам; для «Всё» — ноль.
+ *
+ * Неделя и месяц календарные: с понедельника и с первого числа.
+ * Водитель считает их именно так, да и список дней иначе разошёлся
+ * бы с итогами.
+ */
 fun periodStartMs(period: StatsPeriod, nowWallMs: Long): Long {
-    if (period == StatsPeriod.ALL) return 0L
-    val firstDay = dateOf(nowWallMs).minusDays(period.days - 1L)
-    return startOfDayMs(firstDay)
+    val today = dateOf(nowWallMs)
+    return when (period) {
+        StatsPeriod.DAY -> startOfDayMs(today)
+        StatsPeriod.WEEK -> startOfDayMs(today.with(DayOfWeek.MONDAY))
+        StatsPeriod.MONTH -> startOfDayMs(today.withDayOfMonth(1))
+        StatsPeriod.ALL -> 0L
+    }
 }
 
 /** Считает статистику по всем сохранённым поездкам за выбранный период. */
@@ -101,9 +119,15 @@ fun buildStats(
             bucketTitle = "ВИТОРГ ПО ДНЯХ"
         }
 
+        period == StatsPeriod.WEEK -> {
+            buckets = dailyBuckets(trips, today.with(DayOfWeek.MONDAY), 7, today)
+            bucketTitle = "ВИТОРГ ПО ДНЯХ"
+        }
+
         else -> {
-            val firstDay = today.minusDays(period.days - 1L)
-            buckets = dailyBuckets(trips, firstDay, period.days, today)
+            // Месяц рисуем с первого числа по сегодня: пустые будущие
+            // дни только сплющили бы столбики
+            buckets = dailyBuckets(trips, today.withDayOfMonth(1), today.dayOfMonth, today)
             bucketTitle = "ВИТОРГ ПО ДНЯХ"
         }
     }
@@ -143,7 +167,12 @@ private fun dailyBuckets(
             index % 5 == 0 || index == days - 1 -> date.dayOfMonth.toString()
             else -> ""
         }
-        Bucket(label = label, value = sums[index], emphasized = date == today)
+        Bucket(
+            label = label,
+            value = sums[index],
+            dayMs = startOfDayMs(date),
+            emphasized = date == today,
+        )
     }
 }
 
@@ -155,4 +184,84 @@ private fun allTimeBuckets(trips: List<TripRecord>, today: LocalDate): List<Buck
     val days = span.coerceIn(1, 60)
     val firstDay = today.minusDays(days - 1L)
     return dailyBuckets(trips, firstDay, days, today)
+}
+
+/** Один день в списке поездок за неделю или месяц. */
+data class DaySlice(
+    val dayMs: Long,
+    val title: String,
+    val trips: Int,
+    val revenue: Double,
+    val isToday: Boolean,
+)
+
+private val weekdaysFull = arrayOf(
+    "Понеділок", "Вівторок", "Середа", "Четвер", "П’ятниця", "Субота", "Неділя",
+)
+
+private val monthsGenitive = arrayOf(
+    "січня", "лютого", "березня", "квітня", "травня", "червня",
+    "липня", "серпня", "вересня", "жовтня", "листопада", "грудня",
+)
+
+/**
+ * Дни периода для списка поездок.
+ *
+ * За неделю — семь дней от понедельника, за месяц — числа от первого
+ * до конца, за «Усе» — только те дни, в которые что-то было.
+ * Пустые дни остаются в списке: по ним видно, что день был выходной,
+ * а не потерялся.
+ */
+fun buildDays(
+    allTrips: List<TripRecord>,
+    period: StatsPeriod,
+    nowWallMs: Long,
+): List<DaySlice> {
+    val today = dateOf(nowWallMs)
+    val byDay = allTrips.groupBy { dateOf(it.finishedAtWallMs) }
+
+    val dates: List<LocalDate> = when (period) {
+        StatsPeriod.WEEK -> {
+            val monday = today.with(DayOfWeek.MONDAY)
+            (0 until 7).map { monday.plusDays(it.toLong()) }
+        }
+
+        StatsPeriod.MONTH -> {
+            val first = today.withDayOfMonth(1)
+            (0 until today.lengthOfMonth()).map { first.plusDays(it.toLong()) }
+        }
+
+        else -> byDay.keys.sortedDescending()
+    }
+
+    return dates.map { date ->
+        val trips = byDay[date].orEmpty()
+        val title = if (period == StatsPeriod.MONTH) {
+            "${date.dayOfMonth} (${weekdays[date.dayOfWeek.value - 1]})"
+        } else {
+            "${weekdaysFull[date.dayOfWeek.value - 1]}, " +
+                "${date.dayOfMonth} ${monthsGenitive[date.monthValue - 1]}"
+        }
+        DaySlice(
+            dayMs = startOfDayMs(date),
+            title = title,
+            trips = trips.size,
+            revenue = trips.sumOf { it.total },
+            isToday = date == today,
+        )
+    }
+}
+
+/** Поездки одного дня, новые первыми. */
+fun tripsOfDay(allTrips: List<TripRecord>, dayMs: Long): List<TripRecord> {
+    val next = dayMs + 24L * 60 * 60 * 1000
+    return allTrips
+        .filter { it.finishedAtWallMs in dayMs until next }
+        .sortedByDescending { it.finishedAtWallMs }
+}
+
+/** Заголовок экрана одного дня: «28 вересня». */
+fun dayTitle(dayMs: Long): String {
+    val date = dateOf(dayMs)
+    return "${date.dayOfMonth} ${monthsGenitive[date.monthValue - 1]}"
 }

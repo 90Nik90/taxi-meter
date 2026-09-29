@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -30,6 +32,9 @@ private enum class Screen {
     /** Список поездок за выбранный в статистике период */
     TRIPS,
 
+    /** Поездки одного дня */
+    DAY_TRIPS,
+
     /** Тарифы: выбрать, поправить шестерёнкой, удалить корзиной */
     PROFILES,
 
@@ -49,6 +54,7 @@ fun TaxiRoot(
     val gps by vm.gps.collectAsStateWithLifecycle()
     val toast by vm.toast.collectAsStateWithLifecycle()
     val tripSaved by vm.tripSaved.collectAsStateWithLifecycle()
+    val paymentDialog by vm.paymentDialog.collectAsStateWithLifecycle()
 
     // Активный тариф читается из хранилища; список и настройки собраны
     // выше, поэтому его смена приводит к перерисовке.
@@ -66,6 +72,9 @@ fun TaxiRoot(
     // Период статистики живёт выше экрана: он нужен и списку поездок
     var statsPeriod by remember { mutableStateOf(StatsPeriod.DAY) }
 
+    /** Выбранный день в списке поездок за неделю или месяц */
+    var pickedDay by remember { mutableStateOf(0L) }
+
     // Часы для границ периодов статистики
     var nowWallMs by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
@@ -82,16 +91,30 @@ fun TaxiRoot(
         back()
     }
 
+    // Цвет сообщения решается до показа: сам Snackbar о нём не знает
+    var toastIsError by remember { mutableStateOf(false) }
+
     LaunchedEffect(toast) {
         toast?.let {
-            snackbar.showSnackbar(it)
+            toastIsError = it.isError
+            snackbar.showSnackbar(it.text)
             vm.consumeToast()
         }
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = {
+            SnackbarHost(snackbar) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (toastIsError) MaterialTheme.colorScheme.error
+                    else SnackbarDefaults.color,
+                    contentColor = if (toastIsError) MaterialTheme.colorScheme.onError
+                    else SnackbarDefaults.contentColor,
+                )
+            }
+        },
     ) { padding ->
         when (screen) {
             Screen.CALC -> Box(
@@ -141,6 +164,17 @@ fun TaxiRoot(
                 trips = trips,
                 period = statsPeriod,
                 nowWallMs = nowWallMs,
+                onOpenDay = {
+                    pickedDay = it
+                    go(Screen.DAY_TRIPS)
+                },
+                onDeleteTrip = vm::deleteTrip,
+                onBack = back,
+            )
+
+            Screen.DAY_TRIPS -> DayTripsScreen(
+                trips = trips,
+                dayMs = pickedDay,
                 onDeleteTrip = vm::deleteTrip,
                 onBack = back,
             )
@@ -203,6 +237,20 @@ fun TaxiRoot(
                     )
                 }
             }
+        }
+
+        // Попап поверх любого экрана: пока поездка не завершена,
+        // закрыть его нечем.
+        val fare = calc.fare(activeProfile, settings.servicePrices)
+        if (paymentDialog && fare != null) {
+            PaymentDialog(
+                fare = fare,
+                idleMinutes = calc.idleMinutes,
+                coarseKm = meter.coarseKm,
+                payment = calc.payment,
+                onSelect = vm::setPayment,
+                onFinish = vm::finishTrip,
+            )
         }
     }
 }

@@ -40,6 +40,11 @@ data class TripRecord(
     val servicesTotal: Double = 0.0,
     /** Сколько километров посчитано грубо, без спутников */
     val coarseKm: Double = 0.0,
+    /**
+     * Поездку мерил счётчик, а не водитель руками. У такой есть
+     * настоящие начало и конец; у расчёта — только момент записи.
+     */
+    val metered: Boolean = false,
 ) {
     /** Подпись способа оплаты для показа; пусто, если способ не записан. */
     val paymentTitle: String
@@ -47,4 +52,7 @@ data class TripRecord(
 
     /** Ожидание в целых минутах */
     val idleMinutes: Int get() = (idleMs / 60_000L).toInt()
+
+    /** Сколько длилась поездка по часам телефона, мс */
+    val durationMs: Long get() = (finishedAtWallMs - startedAtWallMs).coerceAtLeast(0)
 }

@@ -216,9 +216,7 @@ fun ServicePricesScreen(
             NumberField("Тварини, грн", pets) { pets = it }
             NumberField("Багаж у салоні, грн", luggage) { luggage = it }
 
-            error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
+            error?.let { ErrorBox(it) }
 
             Spacer(Modifier.height(4.dp))
             Button(
@@ -295,9 +293,7 @@ fun ProfileEditScreen(
             NumberField("Мінімальна ціна за поїздку, грн", minPrice) { minPrice = it }
             NumberField("Мін. відстань для мін. ціни, км", minKm) { minKm = it }
 
-            error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
+            error?.let { ErrorBox(it) }
 
             Spacer(Modifier.height(4.dp))
             Button(

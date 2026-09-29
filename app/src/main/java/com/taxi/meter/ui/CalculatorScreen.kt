@@ -94,9 +94,9 @@ fun CalculatorScreen(
     val fare = input.fare(profile, servicePrices)
     val focus = LocalFocusManager.current
 
-    // Пока счётчик работает, поля заполняет он: руками их не трогаем,
-    // иначе набранное затрётся следующей выборкой.
-    val locked = gpsEnabled && meter.isActive
+    // Со счётчиком поля заполняет он: руками их не трогаем совсем,
+    // а до старта в них стоят нули, а не пустота.
+    val locked = gpsEnabled
 
     Column(
         modifier = Modifier
@@ -143,7 +143,8 @@ fun CalculatorScreen(
             AmountField(
                 label = "Відстань",
                 suffix = "км",
-                value = input.distanceText,
+                value = if (locked && input.distanceText.isEmpty()) "0.00"
+                else input.distanceText,
                 decimal = true,
                 enabled = !locked,
                 imeAction = ImeAction.Next,
@@ -153,7 +154,7 @@ fun CalculatorScreen(
             AmountField(
                 label = "Очікування",
                 suffix = "хв",
-                value = input.idleText,
+                value = if (locked && input.idleText.isEmpty()) "0" else input.idleText,
                 decimal = false,
                 enabled = !locked,
                 imeAction = ImeAction.Done,

@@ -276,6 +276,7 @@
   }
 
   .textbtn:hover { background: rgba(255, 212, 38, .1); }
+  .textbtn:disabled { color: var(--m-dim); cursor: default; background: none; }
 
   .minput {
     width: 100%;
@@ -448,6 +449,24 @@
   .dialog .dactions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 10px; }
   hr { border: 0; border-top: 1px solid var(--m-outline); margin: 2px 0; width: 100%; }
 
+  /* Предупреждение красной плашкой: пустое не показывается */
+  .errbox {
+    background: color-mix(in srgb, var(--m-stop) 18%, transparent);
+    color: var(--m-stop);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .errbox:empty { display: none; }
+
+  .toast.err {
+    background: var(--m-stop);
+    color: #fff;
+    font-weight: 700;
+  }
+
   .toast {
     position: absolute;
     left: 16px;
@@ -532,8 +551,8 @@
   .chart {
     display: flex;
     align-items: flex-end;
-    gap: 2px;
-    height: 110px;
+    gap: 4px;
+    height: 104px;
   }
 
   .bar-col {
@@ -543,9 +562,43 @@
     flex-direction: column;
     justify-content: flex-end;
     align-items: center;
+    cursor: pointer;
   }
 
   .bar { width: 100%; border-radius: 3px 3px 0 0; }
+
+  /* Подпись над выбранным столбиком */
+  .chart-wrap { position: relative; padding-top: 38px; }
+
+  .bar-tip {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    background: var(--m-variant);
+    border: 1px solid var(--m-outline);
+    border-radius: 8px;
+    padding: 4px 9px;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .bar-tip-day { font-size: 10px; color: var(--m-dim); }
+  .bar-tip-sum { font-size: 13px; font-weight: 700; color: var(--m-accent); }
+
+  /* Ложе столбика: по нему видно, где кончается один день и начинается другой */
+  .bar-track {
+    width: 100%;
+    height: 84px;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(255, 255, 255, .04);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .bar-col.sel .bar-track { background: rgba(255, 255, 255, .12); }
+  .bar-col.sel .bar-label { color: var(--m-on); font-weight: 700; }
 
   .bar-label {
     font-size: 9px;
@@ -554,6 +607,36 @@
     white-space: nowrap;
   }
 
+
+  /* Строка дня в списке поездок за неделю или месяц */
+  .dayrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    border-radius: 12px;
+    background: var(--m-surface);
+    font-size: 16px;
+  }
+
+  .dayrow.tap { cursor: pointer; border: 1px solid var(--m-outline); }
+  .dayrow.tap:hover { background: #1f2731; border-color: var(--m-dim); }
+  .dayrow.today { border-color: var(--m-go); }
+  .dayrow.empty { background: none; color: var(--m-dim); padding: 9px 16px; }
+  .daysum { font-size: 15px; font-weight: 700; color: var(--m-accent); }
+  /* Пометка «посчитано калькулятором» слева, по центру карточки */
+  .triprow { display: flex; align-items: center; gap: 10px; }
+  .tripmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+  .calcmark {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    color: var(--m-dim);
+    flex: none;
+  }
+
+  .calcmark svg { width: 18px; height: 18px; fill: currentColor; }
 
   .trashbtn { width: 32px; height: 32px; color: var(--m-stop); flex: none; }
   .trashbtn svg { width: 18px; height: 18px; }
@@ -599,10 +682,11 @@
     del: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z',
     check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
     chart: 'M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z',
+    calc: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm1 3v3h10V5H7zm0 5.5v2h2.5v-2H7zm4.25 0v2h1.5v-2h-1.5zm3.25 0v2H17v-2h-2.5zM7 14v2h2.5v-2H7zm4.25 0v2h1.5v-2h-1.5zm3.25 0v2H17v-2h-2.5zM7 17.5v2h2.5v-2H7zm4.25 0v2h1.5v-2h-1.5zm3.25 0v2H17v-2h-2.5z',
     settings: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z'
   };
   const svg = (name, cls) =>
-    `<svg viewBox="0 0 24 24"${cls ? ` class="${cls}"` : ''} aria-hidden="true"><path d="${ICON[name]}"/></svg>`;
+    `<svg viewBox="0 0 24 24"${cls ? ` class="${cls}"` : ''} aria-hidden="true"><path fill-rule="evenodd" d="${ICON[name]}"/></svg>`;
 
   /* ═══ Хранилище ═══ */
   const LS = 'taxi-proto-v1';
@@ -677,6 +761,12 @@
     jammed: false,
     /* Сохранённые поездки, новые первыми */
     trips: stored && Array.isArray(stored.trips) ? stored.trips : [],
+    /* Выбранный день в списке поездок за неделю или месяц */
+    pickedDay: null,
+    /* Попап со способом оплаты после «Стоп» */
+    paymentDialog: false,
+    /* Выбранный столбик графика в статистике */
+    pickedBucket: null,
     /* Запись, в которую ещё дописываются правки: null — нечего дописывать */
     lastSavedKey: null,
     /* Статистика: период и раскрытая поездка */
@@ -684,7 +774,7 @@
     pendingTripDelete: null,
     expandedTrip: null,
     /* meter/DistanceMeter.kt — состояние счётчика */
-    meter: { state: 'IDLE', km: 0, coarseKm: 0, idleMs: 0, speed: 0, coarse: false },
+    meter: { state: 'IDLE', km: 0, coarseKm: 0, idleMs: 0, speed: 0, coarse: false, startedAt: 0 },
     /* data/CalcInput.kt — что водитель ввёл в калькуляторе */
     calc: { distanceText: '', idleText: '', services: [], payment: null }
   };
@@ -753,6 +843,12 @@
   }
 
   /* meter/MeterService.kt → formatDate */
+  /** День и месяц для подписи над столбиком: «14 вересня». */
+  const dayLabel = ms => {
+    const d = new Date(ms);
+    return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  };
+
   const MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня',
     'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
   function formatDate(epochMs) {
@@ -764,16 +860,46 @@
   /* data/Stats.kt — периоды и агрегаты */
   const PERIODS = [
     { key: 'DAY', title: 'День', hint: 'з початку доби', days: 1 },
-    { key: 'WEEK', title: 'Тиждень', hint: 'останні 7 днів', days: 7 },
-    { key: 'MONTH', title: 'Місяць', hint: 'останні 30 днів', days: 30 },
+    { key: 'WEEK', title: 'Тиждень', hint: 'поточний тиждень, Пн — Нд', days: 7 },
+    { key: 'MONTH', title: 'Місяць', hint: 'поточний місяць', days: 0 },
     { key: 'ALL', title: 'Усе', hint: 'усі збережені поїздки', days: 0 }
   ];
   const WEEKDAYS = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  const WEEKDAYS_FULL = ['Неділя', 'Понеділок', 'Вівторок', 'Середа',
+    'Четвер', 'Пʼятниця', 'Субота'];
 
   const startOfDay = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
   const DAY_MS = 86400000;
 
+  /** Понедельник текущей недели. */
+  const startOfWeek = ms => {
+    const d = new Date(ms);
+    d.setHours(0, 0, 0, 0);
+    // getDay(): 0 — воскресенье, поэтому сдвигаем начало на понедельник
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.getTime();
+  };
+
+  /** Первое число текущего месяца. */
+  const startOfMonth = ms => {
+    const d = new Date(ms);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+
+  /** Сколько дней в месяце, на который попадает ms. */
+  const daysInMonth = ms => {
+    const d = new Date(ms);
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  };
+
   function periodStartMs(periodKey, nowMs) {
+    // Неделя и месяц считаются календарные: понедельник — воскресенье
+    // и числа от первого до конца. Иначе список дней разошёлся бы
+    // с итогами, да и водитель считает неделю именно так.
+    if (periodKey === 'WEEK') return startOfWeek(nowMs);
+    if (periodKey === 'MONTH') return startOfMonth(nowMs);
     const p = PERIODS.find(x => x.key === periodKey);
     if (!p || p.days === 0) return 0;
     return startOfDay(nowMs) - (p.days - 1) * DAY_MS;
@@ -810,8 +936,11 @@
     } else if (periodKey === 'ALL') {
       buckets = allTimeBuckets(trips, nowMs);
     } else {
-      const p = PERIODS.find(x => x.key === periodKey);
-      buckets = dailyBuckets(trips, fromMs, p.days, nowMs);
+      // Месяц рисуем с первого числа по сегодня: будущие дни пустые
+      const days = periodKey === 'MONTH'
+        ? new Date(nowMs).getDate()
+        : PERIODS.find(x => x.key === periodKey).days;
+      buckets = dailyBuckets(trips, fromMs, days, nowMs);
     }
 
     return {
@@ -845,7 +974,11 @@
       let label = '';
       if (days <= 7) label = WEEKDAYS[d.getDay()];
       else if (i % 5 === 0 || i === days - 1) label = String(d.getDate());
-      out.push({ label, value: sums[i], emphasized: startOfDay(dayStart) === todayStart });
+      // День нужен целиком: по нажатию на столбик показываем дату
+      out.push({
+        label, value: sums[i], ms: dayStart,
+        emphasized: startOfDay(dayStart) === todayStart
+      });
     }
     return out;
   }
@@ -859,6 +992,14 @@
     return dailyBuckets(trips, startOfDay(nowMs) - (days - 1) * DAY_MS, days, nowMs);
   }
 
+
+  /** Длительность поездки: ч:мм:сс или мм:сс. */
+  function formatDuration(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    const pad = n => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
 
   /* ui/Format.kt → formatMinutes */
   const formatMinutes = minutes => `${minutes} хв`;
@@ -942,12 +1083,19 @@
 
   /* ═══ Запись поездки ═══ */
 
-  /** Запись из того, что сейчас в калькуляторе. */
-  function tripFromCalc(key) {
+  /**
+   * Запись из того, что сейчас в калькуляторе.
+   *
+   * У поездки со счётчиком есть настоящие начало и конец; у расчёта
+   * руками — только момент записи. Признак передаётся явно: состояние
+   * счётчика доживает до следующего расчёта и соврало бы.
+   */
+  function tripFromCalc(key, metered, startedAt) {
     const p = activeProfile();
     const f = fare();
     return {
-      startedAtWallMs: key,
+      metered: !!metered,
+      startedAtWallMs: metered ? (startedAt || key) : key,
       finishedAtWallMs: key,
       distanceKm: f.distanceKm,
       runningMs: 0,
@@ -969,7 +1117,7 @@
     if (!activeProfile() || calcKm() <= 0) return;
     const key = Date.now();
     S.lastSavedKey = key;
-    S.trips = [tripFromCalc(key)].concat(S.trips).slice(0, 500);
+    S.trips = [tripFromCalc(key, true, S.meter.startedAt)].concat(S.trips).slice(0, 500);
     save();
     toast(`Збережено: ${fmt(fare().total)} грн`);
   }
@@ -984,15 +1132,22 @@
     if (!S.lastSavedKey) return;
     const i = S.trips.findIndex(t => t.finishedAtWallMs === S.lastSavedKey);
     if (i < 0) { S.lastSavedKey = null; return; }
-    S.trips[i] = tripFromCalc(S.lastSavedKey);
+    S.trips[i] = tripFromCalc(S.lastSavedKey, S.trips[i].metered, S.trips[i].startedAtWallMs);
     save();
   }
 
   /* ═══ Действия ═══ */
   let toastTimer = null;
-  function toast(msg) {
+  /**
+   * Сообщение внизу экрана.
+   *
+   * Предупреждения красные: их водитель видит краем глаза за рулём,
+   * и цвет должен сразу говорить, что дело не сделано.
+   */
+  function toast(msg, kind) {
     const el = document.getElementById('toast');
     el.textContent = msg;
+    el.classList.toggle('err', kind === 'error');
     el.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
@@ -1000,9 +1155,10 @@
 
   const A = {
     resetCalc() {
-      S.meter = { state: 'IDLE', km: 0, coarseKm: 0, idleMs: 0, speed: 0, coarse: false };
+      S.meter = { state: 'IDLE', km: 0, coarseKm: 0, idleMs: 0, speed: 0, coarse: false, startedAt: 0 };
       S.calc = { distanceText: '', idleText: '', services: [], payment: null };
       S.lastSavedKey = null;
+      S.paymentDialog = false;
       render();
     },
 
@@ -1031,7 +1187,7 @@
     startMeter() {
       S.meter = {
         state: 'RUNNING', km: 0, coarseKm: 0, idleMs: 0,
-        speed: DEMO_SPEED_KMH, coarse: false
+        speed: DEMO_SPEED_KMH, coarse: false, startedAt: Date.now()
       };
       jammedMs = 0;
       S.lastSavedKey = null;
@@ -1048,12 +1204,12 @@
     /* Ручное сохранение: нужно, когда счётчиком не пользовались */
     saveTrip() {
       const p = activeProfile();
-      if (!p) { toast('Створіть тарифний профіль'); return; }
-      if (calcKm() <= 0) { toast('Вкажіть відстань поїздки'); return; }
-      if (!S.calc.payment) { toast('Виберіть спосіб оплати'); return; }
+      if (!p) { toast('Створіть тарифний профіль', 'error'); return; }
+      if (calcKm() <= 0) { toast('Вкажіть відстань поїздки', 'error'); return; }
+      if (!S.calc.payment) { toast('Виберіть спосіб оплати', 'error'); return; }
 
       const f = fare();
-      S.trips = [tripFromCalc(Date.now())].concat(S.trips).slice(0, 500);
+      S.trips = [tripFromCalc(Date.now(), false, 0)].concat(S.trips).slice(0, 500);
       save();
       toast(`Збережено: ${fmt(f.total)} грн`);
       A.resetCalc();
@@ -1087,6 +1243,22 @@
       S.meter.coarse = false;
       S.jammed = false;
       meterToCalc();
+      // Поездка уходит в историю не сразу: сперва водитель отмечает,
+      // чем с ним расплатились. Без этого разбивка выручки развалится.
+      if (activeProfile() && calcKm() > 0) S.paymentDialog = true;
+      render();
+    },
+
+    /* Выбор в попапе после «Стоп» */
+    dialogPayment(key) {
+      S.calc.payment = (S.calc.payment === key) ? null : key;
+      render();
+    },
+
+    /* Завершить поездку: без способа оплаты кнопка не работает */
+    finishTrip() {
+      if (!S.calc.payment) return;
+      S.paymentDialog = false;
       recordTrip();
       render();
     },
@@ -1215,20 +1387,43 @@
 
       const maxBucket = st.buckets.reduce((a, b) => Math.max(a, b.value), 0);
       if (maxBucket > 0) {
+        // Подпись над выбранным столбиком: столбиков много, подписать
+        // каждый негде, поэтому сумма показывается по нажатию
+        const picked = (S.pickedBucket !== null && st.buckets[S.pickedBucket])
+          ? S.pickedBucket : null;
+        let tip = '';
+        if (picked !== null) {
+          const pos = (picked + 0.5) / st.buckets.length;
+          // У краёв подпись разворачивается внутрь, иначе её срежет карточка
+          const shift = pos < 0.2 ? 'translateX(0)'
+            : pos > 0.8 ? 'translateX(-100%)' : 'translateX(-50%)';
+          tip = `<div class="bar-tip" style="left:${(pos * 100).toFixed(2)}%;transform:${shift}">
+            <div class="bar-tip-day">${dayLabel(st.buckets[picked].ms)}</div>
+            <div class="bar-tip-sum mono">${fmt(st.buckets[picked].value)} грн</div>
+          </div>`;
+        }
+
         body += `<div class="card">
           <div class="row between">
             <span class="label">${st.bucketTitle}</span>
             <span class="label">макс. ${fmt(maxBucket)} грн</span>
           </div>
-          <div class="chart">
-            ${st.buckets.map(b => {
-              const ratio = b.value / maxBucket;
-              const color = b.value <= 0 ? 'var(--m-variant)' : (b.emphasized ? 'var(--m-go)' : 'var(--m-accent)');
-              return `<div class="bar-col" title="${fmt(b.value)} грн">
-                <div class="bar" style="height:${2 + 84 * ratio}px;background:${color}"></div>
-                <div class="bar-label">${b.label}</div>
-              </div>`;
-            }).join('')}
+          <div class="chart-wrap">
+            ${tip}
+            <div class="chart">
+              ${st.buckets.map((b, i) => {
+                const ratio = b.value / maxBucket;
+                const color = b.value <= 0 ? 'var(--m-outline)'
+                  : (b.emphasized ? 'var(--m-go)' : 'var(--m-accent)');
+                return `<div class="bar-col${i === picked ? ' sel' : ''}"
+                  data-act="pickBucket" data-arg="${i}">
+                  <div class="bar-track">
+                    <div class="bar" style="height:${(2 + 82 * ratio).toFixed(1)}px;background:${color}"></div>
+                  </div>
+                  <div class="bar-label">${b.label}</div>
+                </div>`;
+              }).join('')}
+            </div>
           </div>
         </div>`;
       }
@@ -1265,16 +1460,16 @@
   }
 
   /** ui/StatisticsScreen.kt → TripsScreen: только список за выбранный период. */
-  function tripsScreen() {
-    const period = S.statsPeriod;
-    const st = buildStats(period, Date.now());
-    const showDate = period !== 'DAY';
+  /** Карточка одной поездки в списке. */
+  function tripCard(t, showDate) {
+    const open = S.expandedTrip === t.finishedAtWallMs;
     const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
 
-    const list = st.trips.length
-      ? st.trips.map(t => {
-        const open = S.expandedTrip === t.finishedAtWallMs;
-        return `<div class="card tap" data-act="expandTrip" data-arg="${t.finishedAtWallMs}">
+    return `<div class="card tap" data-act="expandTrip" data-arg="${t.finishedAtWallMs}">
+      <div class="triprow">
+        <span class="calcmark"${t.metered ? '' : ' title="Розраховано калькулятором"'
+          }>${t.metered ? '' : svg('calc')}</span>
+        <div class="tripmain">
           <div class="row between">
             <span class="mono" style="font-size:14px">${showDate
               ? formatDate(t.finishedAtWallMs)
@@ -1282,36 +1477,128 @@
             <span class="mono" style="font-size:17px;font-weight:700;color:var(--m-accent)">${fmt(t.total)} грн</span>
           </div>
           <div class="row">
-            <span class="small grow">${fmt(t.distanceKm)} км${
-              t.idleMs > 0 ? ` · ${formatMinutes(Math.round(t.idleMs / 60000))} очікування` : ''}${
+            <span class="small grow">${t.metered
+              ? formatDuration(t.finishedAtWallMs - t.startedAtWallMs)
+              : 'розрахунок'}${
               t.payment ? ` · ${paymentTitle(t)}` : ''}${
               t.profileName ? ` · ${esc(t.profileName)}` : ''}</span>
             <button class="iconbtn trashbtn" data-act="askDeleteTrip" data-arg="${t.finishedAtWallMs}"
               aria-label="Видалити поїздку">${svg('del')}</button>
           </div>
-          ${open ? `<hr>
-            ${kv('Час розрахунку', formatClock(t.finishedAtWallMs))}
-            ${kv('Відстань', `${fmt(t.distanceKm)} км`)}
-            ${t.coarseKm > 0 ? kv('З них приблизно', `${fmt(t.coarseKm)} км`) : ''}
-            ${t.idleMs > 0 ? kv('Очікування', formatMinutes(Math.round(t.idleMs / 60000))) : ''}
-            ${t.profileName ? kv('Тариф', esc(t.profileName)) : ''}
-            ${t.payment ? kv('Оплата', paymentTitle(t)) : ''}
-            ${(t.services && t.services.length) ? kv('Послуги', t.services.join(', ')) : ''}
-            ${(t.services && t.services.length) ? kv('Доплати', `${fmt(t.servicesTotal || 0)} грн`) : ''}
-            ${t.distanceKm > 0 ? kv('Ціна за км', `${fmt(t.total / t.distanceKm)} грн`) : ''}
-          ` : ''}
+        </div>
+      </div>
+      ${open ? `<hr>
+        ${t.metered
+          // У поездки со счётчиком есть настоящие начало и конец;
+          // у расчёта руками — только момент записи.
+          ? kv('Початок', formatClock(t.startedAtWallMs))
+            + kv('Кінець', formatClock(t.finishedAtWallMs))
+            + kv('Тривалість', formatDuration(t.finishedAtWallMs - t.startedAtWallMs))
+          : kv('Час розрахунку', formatClock(t.finishedAtWallMs))}
+        ${t.profileName ? kv('Тариф', esc(t.profileName)) : ''}
+        ${kv('Вартість', `${fmt(t.total)} грн`)}
+        ${t.payment ? kv('Оплата', paymentTitle(t)) : ''}
+      ` : ''}
+    </div>`;
+  }
+
+  const emptyCard = `<div class="card">
+      <div style="font-size:17px;font-weight:500">За період немає поїздок</div>
+      <div class="small">Збережіть перший розрахунок — усе порахується само.</div>
+    </div>`;
+
+  /**
+   * За день — сразу список поездок. За неделю и месяц их слишком много,
+   * поэтому сперва дни, а поездки уже внутри дня.
+   */
+  function tripsScreen() {
+    const period = S.statsPeriod;
+    const st = buildStats(period, Date.now());
+
+    if (period === 'DAY') {
+      return appbar(`Поїздки · ${st.tripCount}`, true)
+        + `<div class="body-scroll">
+          <div class="small" style="text-align:center">${
+            (PERIODS.find(p => p.key === period) || {}).hint}</div>
+          ${st.trips.length ? st.trips.map(t => tripCard(t, false)).join('') : emptyCard}
+          <div style="height:16px"></div>
         </div>`;
-      }).join('')
-      : `<div class="card">
-          <div style="font-size:17px;font-weight:500">За період немає поїздок</div>
-          <div class="small">Завершіть першу поїздку — усе порахується само.</div>
-        </div>`;
+    }
 
     return appbar(`Поїздки · ${st.tripCount}`, true)
       + `<div class="body-scroll">
         <div class="small" style="text-align:center">${
           (PERIODS.find(p => p.key === period) || {}).hint}</div>
-        ${list}
+        ${dayRows(period, st.trips)}
+        <div style="height:16px"></div>
+      </div>`;
+  }
+
+  /** Дни периода: за неделю — по дням недели, за месяц — по числам. */
+  function dayRows(period, trips) {
+    const now = Date.now();
+    const byDay = {};
+    trips.forEach(t => {
+      const key = startOfDay(t.finishedAtWallMs);
+      byDay[key] = byDay[key] || { count: 0, total: 0 };
+      byDay[key].count++;
+      byDay[key].total += t.total;
+    });
+
+    let days = [];
+    if (period === 'WEEK') {
+      const from = periodStartMs('WEEK', now);
+      for (let i = 0; i < 7; i++) days.push(from + i * DAY_MS);
+    } else if (period === 'MONTH') {
+      const from = startOfMonth(now);
+      const total = daysInMonth(now);
+      for (let i = 0; i < total; i++) days.push(from + i * DAY_MS);
+    } else {
+      // «Усе»: показываем только те дни, в которые что-то было
+      days = Object.keys(byDay).map(Number).sort((a, b) => b - a);
+    }
+
+    if (!days.length) return emptyCard;
+
+    const today = startOfDay(now);
+    return days.map(ms => {
+      const d = new Date(ms);
+      const data = byDay[startOfDay(ms)];
+      const title = period === 'MONTH'
+        ? `${d.getDate()} (${WEEKDAYS[d.getDay()]})`
+        : `${WEEKDAYS_FULL[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+
+      if (!data) {
+        return `<div class="dayrow empty">
+          <span class="grow">${title}</span>
+          <span class="small">—</span>
+        </div>`;
+      }
+
+      return `<div class="dayrow tap${ms === today ? ' today' : ''}"
+        data-act="pickDay" data-arg="${ms}">
+        <span class="grow">${title}</span>
+        <span class="small">${data.count} ${plural(data.count)}</span>
+        <span class="mono daysum">${fmt(data.total)} грн</span>
+      </div>`;
+    }).join('');
+  }
+
+  const plural = n => (n % 10 === 1 && n % 100 !== 11) ? 'поїздка'
+    : ([2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100)) ? 'поїздки' : 'поїздок';
+
+  /** Поездки одного дня. */
+  function dayTripsScreen() {
+    const from = S.pickedDay;
+    const to = from + DAY_MS;
+    const trips = S.trips
+      .filter(t => t.finishedAtWallMs >= from && t.finishedAtWallMs < to)
+      .sort((a, b) => b.finishedAtWallMs - a.finishedAtWallMs);
+    const d = new Date(from);
+
+    return appbar(`${d.getDate()} ${MONTHS[d.getMonth()]} · ${trips.length}`, true)
+      + `<div class="body-scroll">
+        ${trips.length ? trips.map(t => tripCard(t, false)).join('') : emptyCard}
         <div style="height:16px"></div>
       </div>`;
   }
@@ -1379,12 +1666,14 @@
 
     // Пока счётчик работает, поля заполняет он: руками их не трогаем,
     // иначе набранное затрётся следующей выборкой.
-    const locked = S.gpsEnabled && st !== 'IDLE';
+    // Со счётчиком поля заполняет он: руками их не трогаем совсем,
+    // а до старта в них стоят нули, а не пустота.
+    const locked = S.gpsEnabled;
 
-    const field = (id, label, unit, val, big) => `<div class="mfield">
+    const field = (id, label, unit, val, zero) => `<div class="mfield">
       <span class="flabel">${label}</span>
-      <input class="minput${big ? ' big' : ''}" id="${id}" value="${esc(val)}" inputmode="decimal"
-        autocomplete="off"${locked ? ' disabled' : ''}>
+      <input class="minput big" id="${id}" inputmode="decimal" autocomplete="off"
+        value="${esc(locked && val === '' ? zero : val)}"${locked ? ' disabled' : ''}>
       <span class="funit">${unit}</span>
     </div>`;
 
@@ -1416,8 +1705,8 @@
           <div><span class="big" id="cTotal">0.00</span><span class="unit">грн</span></div>
         </div>
 
-        ${field('cDist', 'Відстань', 'км', c.distanceText, true)}
-        ${field('cIdle', 'Очікування', 'хв', c.idleText, true)}
+        ${field('cDist', 'Відстань', 'км', c.distanceText, '0.00')}
+        ${field('cIdle', 'Очікування', 'хв', c.idleText, '0')}
 
         ${S.gpsEnabled ? meterControls(st) : ''}
 
@@ -1530,7 +1819,7 @@
         ${f('eIdle', 'Вартість простою, грн/хв', fmt(p.pricePerIdleMinute), 1)}
         ${f('eMin', 'Мінімальна ціна за поїздку, грн', fmt(p.minPrice), 1)}
         ${f('eMinD', 'Мін. відстань для мін. ціни, км', fmt(p.minDistanceKm, 1), 1)}
-        <div class="small" id="eErr" style="color:var(--m-stop)"></div>
+        <div class="errbox" id="eErr"></div>
         <button class="savebtn" data-act="saveProfile">Зберегти</button>
       </div>`;
   }
@@ -1547,9 +1836,47 @@
         ${f('sChildren', 'Діти, грн', fmt(sp.children || 0))}
         ${f('sPets', 'Тварини, грн', fmt(sp.pets || 0))}
         ${f('sLuggage', 'Багаж у салоні, грн', fmt(sp.luggage || 0))}
-        <div class="small" id="sErr" style="color:var(--m-stop)"></div>
+        <div class="errbox" id="sErr"></div>
         <button class="savebtn" data-act="saveServicePrices">Зберегти</button>
       </div>`;
+  }
+
+  /**
+   * Попап после «Стоп»: сумма и способ оплаты.
+   *
+   * Мимо не закрывается и без выбора не завершает — иначе поездка
+   * уйдёт в историю без отметки, и разбивка выручки развалится.
+   */
+  function paymentDialog() {
+    const f = fare();
+    if (!f) return '';
+    const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+
+    return `<div class="scrim">
+      <div class="dialog wide">
+        <h3 class="center">Поїздку завершено</h3>
+        <div class="dtotal">${fmt(f.total)}<span class="cur">грн</span></div>
+        <hr>
+        ${kv('Відстань', `${fmt(f.distanceKm)} км`)}
+        ${calcMinutes() > 0 ? kv('Очікування', formatMinutes(calcMinutes())) : ''}
+        ${S.meter.coarseKm > 0 ? kv('З них приблизно', `${fmt(S.meter.coarseKm)} км`) : ''}
+        <hr>
+        <div class="label">СПОСІБ ОПЛАТИ</div>
+        ${PAYMENTS.map(m => {
+          const on = S.calc.payment === m.key;
+          return `<div class="service" data-act="dialogPayment" data-arg="${m.key}">
+            <span class="checkbox${on ? ' on' : ''}">${on ? svg('check') : ''}</span>
+            <span class="grow">${m.title}</span>
+          </div>`;
+        }).join('')}
+        ${S.calc.payment ? ''
+          : '<div class="errbox">Виберіть спосіб оплати, щоб завершити</div>'}
+        <div class="dactions center">
+          <button class="textbtn" data-act="finishTrip"${
+            S.calc.payment ? '' : ' disabled'}>Завершити поїздку</button>
+        </div>
+      </div>
+    </div>`;
   }
 
   function render() {
@@ -1565,6 +1892,7 @@
       calc: calcScreen,
       statistics: statisticsScreen,
       trips: tripsScreen,
+      dayTrips: dayTripsScreen,
       settings: settingsScreen,
       profiles: profilesScreen,
       edit: editScreen,
@@ -1574,7 +1902,9 @@
     const dlg = document.getElementById('dialogHost');
     const target = S.pendingDelete ? S.profiles.find(p => p.id === S.pendingDelete) : null;
 
-    if (target) {
+    if (S.paymentDialog) {
+      dlg.innerHTML = paymentDialog();
+    } else if (target) {
       dlg.innerHTML = `<div class="scrim" data-act="cancelDelete">
            <div class="dialog" data-act="noop">
              <h3>Видалити тариф?</h3>
@@ -1656,7 +1986,21 @@
       case 'toggleJamming': A.toggleJamming(); break;
       case 'selectPayment': A.selectPayment(arg); break;
       case 'saveTrip': A.saveTrip(); break;
-      case 'statsPeriod': S.statsPeriod = arg; S.expandedTrip = null; render(); break;
+      case 'statsPeriod': S.statsPeriod = arg; S.expandedTrip = null; S.pickedBucket = null; render(); break;
+      case 'pickDay': {
+        S.pickedDay = Number(arg);
+        S.expandedTrip = null;
+        A.go('dayTrips');
+        break;
+      }
+      case 'pickBucket': {
+        const i = Number(arg);
+        S.pickedBucket = (S.pickedBucket === i) ? null : i;
+        render();
+        break;
+      }
+      case 'dialogPayment': A.dialogPayment(arg); break;
+      case 'finishTrip': A.finishTrip(); break;
       case 'askDeleteTrip': A.askDeleteTrip(arg); break;
       case 'cancelDeleteTrip': A.cancelDeleteTrip(); break;
       case 'confirmDeleteTrip': A.confirmDeleteTrip(); break;
