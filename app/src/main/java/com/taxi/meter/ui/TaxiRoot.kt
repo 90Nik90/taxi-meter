@@ -48,6 +48,7 @@ fun TaxiRoot(
     val meter by vm.meter.collectAsStateWithLifecycle()
     val gps by vm.gps.collectAsStateWithLifecycle()
     val toast by vm.toast.collectAsStateWithLifecycle()
+    val tripSaved by vm.tripSaved.collectAsStateWithLifecycle()
 
     // Активный тариф читается из хранилища; список и настройки собраны
     // выше, поэтому его смена приводит к перерисовке.
@@ -105,6 +106,7 @@ fun TaxiRoot(
                     meter = meter,
                     gps = gps,
                     gpsEnabled = settings.gpsEnabled,
+                    tripSaved = tripSaved,
                     onDistanceChange = vm::setDistance,
                     onIdleChange = vm::setIdleMinutes,
                     onToggleService = vm::toggleService,

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -75,6 +76,7 @@ fun CalculatorScreen(
     meter: MeterSnapshot,
     gps: GpsStatus,
     gpsEnabled: Boolean,
+    tripSaved: Boolean,
     onDistanceChange: (String) -> Unit,
     onIdleChange: (String) -> Unit,
     onToggleService: (ExtraService) -> Unit,
@@ -201,28 +203,39 @@ fun CalculatorScreen(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Button(
-                onClick = {
-                    focus.clearFocus()
-                    onSave()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = MaterialTheme.shapes.large,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MeterColors.go,
-                    contentColor = Color(0xFF101418),
-                ),
-            ) {
-                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(8.dp))
-                AutoFitText(
-                    text = "ЗБЕРЕГТИ ПОЇЗДКУ",
-                    maxFontSize = 16.sp,
-                    modifier = Modifier.weight(1f, fill = false),
-                    fontWeight = FontWeight.Bold,
-                )
+            // Со счётчиком поездка сохраняется сама по «Стоп», поэтому
+            // кнопки нет вовсе — только отметка, что запись уже сделана
+            // и правки в полях дописываются в неё.
+            if (!gpsEnabled) {
+                Button(
+                    onClick = {
+                        focus.clearFocus()
+                        onSave()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = MaterialTheme.shapes.large,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MeterColors.go,
+                        contentColor = Color(0xFF101418),
+                    ),
+                ) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    AutoFitText(
+                        text = "ЗБЕРЕГТИ ПОЇЗДКУ",
+                        maxFontSize = 16.sp,
+                        modifier = Modifier.weight(1f, fill = false),
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            } else if (tripSaved) {
+                SavedNote()
             }
             Button(
                 onClick = {
@@ -601,5 +614,32 @@ private fun PaymentCard(
                 Text(method.title, style = MaterialTheme.typography.bodyLarge)
             }
         }
+    }
+}
+
+/** Счётчик уже записал поездку; правки в полях дописываются в неё. */
+@Composable
+private fun SavedNote() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(MaterialTheme.shapes.large)
+            .background(MeterColors.go.copy(alpha = 0.14f))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Check,
+            contentDescription = null,
+            tint = MeterColors.go,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "Збережено в статистику — відмітьте оплату, запис оновиться",
+            style = MaterialTheme.typography.bodySmall,
+            color = MeterColors.go,
+        )
     }
 }

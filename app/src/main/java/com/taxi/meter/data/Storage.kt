@@ -37,10 +37,9 @@ class Storage(context: Context) {
                 else -> it
             }
         }
-        // Записи без способа оплаты остались от версий, где его ещё
-        // не спрашивали: они ломали разбивку по оплате в статистике.
-        val cleaned = migrated.filter { it.payment.isNotBlank() }
-        if (cleaned != _trips.value) persistTrips(cleaned)
+        // Записи без способа оплаты не выбрасываем: счётчик сохраняет
+        // поездку сразу по «Стоп», а оплату водитель отмечает после.
+        if (migrated != _trips.value) persistTrips(migrated)
     }
 
     val activeProfile: Profile?
@@ -109,6 +108,21 @@ class Storage(context: Context) {
      */
     fun deleteTrip(finishedAtWallMs: Long) {
         persistTrips(_trips.value.filterNot { it.finishedAtWallMs == finishedAtWallMs })
+    }
+
+    /**
+     * Переписать запись целиком. Пока поездка остаётся на экране,
+     * правки дописываются в неё, а не плодят вторую.
+     *
+     * @return false, если записи уже нет — её могли удалить из истории.
+     */
+    fun replaceTrip(finishedAtWallMs: Long, record: TripRecord): Boolean {
+        val list = _trips.value.toMutableList()
+        val index = list.indexOfFirst { it.finishedAtWallMs == finishedAtWallMs }
+        if (index < 0) return false
+        list[index] = record
+        persistTrips(list)
+        return true
     }
 
     private fun persistTrips(list: List<TripRecord>) {

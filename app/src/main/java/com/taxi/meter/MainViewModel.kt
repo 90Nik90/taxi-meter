@@ -38,6 +38,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
 
+    /** Поездка уже записана счётчиком и правки дописываются в неё. */
+    private val _tripSaved = MutableStateFlow(false)
+    val tripSaved: StateFlow<Boolean> = _tripSaved.asStateFlow()
+
+    /** Ключ той самой записи; null — дописывать нечего. */
+    private var lastSavedKey: Long? = null
+
     val activeProfile: Profile?
         get() = taxi.storage.activeProfile
 
@@ -87,10 +94,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setDistance(text: String) {
         _calc.value = _calc.value.copy(distanceText = text)
+        syncLastTrip()
     }
 
     fun setIdleMinutes(text: String) {
         _calc.value = _calc.value.copy(idleText = text)
+        syncLastTrip()
     }
 
     fun toggleService(service: ExtraService) {
@@ -98,16 +107,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _calc.value = _calc.value.copy(
             services = if (service in current) current - service else current + service,
         )
+        syncLastTrip()
     }
 
     fun setPayment(method: PaymentMethod?) {
         _calc.value = _calc.value.copy(payment = method)
+        syncLastTrip()
     }
 
     fun resetCalc() {
         stopMeter(write = false)
         taxi.meter.reset()
         _calc.value = CalcInput()
+        forgetSavedTrip()
     }
 
     /**
@@ -127,41 +139,78 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _toast.value = "Вкажіть відстань поїздки"
             return false
         }
-        val payment = input.payment
-        if (payment == null) {
+        if (input.payment == null) {
             _toast.value = "Виберіть спосіб оплати"
             return false
         }
 
+        val record = buildRecord(System.currentTimeMillis(), profile, input)
+        taxi.storage.addTrip(record)
+        _toast.value = "Збережено: ${String.format(Locale.US, "%.2f", record.total)} грн"
+        resetCalc()
+        return true
+    }
+
+    /**
+     * Автосохранение по «Стоп»: поездку, посчитанную счётчиком,
+     * водителю не нужно сохранять руками.
+     */
+    private fun recordTrip() {
+        val profile = taxi.storage.activeProfile ?: return
+        val input = _calc.value
+        if (input.distanceKm <= 0.0) return
+
+        val key = System.currentTimeMillis()
+        val record = buildRecord(key, profile, input)
+        lastSavedKey = key
+        taxi.storage.addTrip(record)
+        _tripSaved.value = true
+        _toast.value = "Збережено: ${String.format(Locale.US, "%.2f", record.total)} грн"
+    }
+
+    /**
+     * Пока запись остаётся текущей, правки дописываются в неё.
+     *
+     * Способ оплаты водитель отмечает уже после остановки, а километры
+     * иногда поправляет руками — заводить на это вторую запись незачем.
+     */
+    private fun syncLastTrip() {
+        val key = lastSavedKey ?: return
+        val profile = taxi.storage.activeProfile
+        val updated = profile != null &&
+            taxi.storage.replaceTrip(key, buildRecord(key, profile, _calc.value))
+        if (!updated) forgetSavedTrip()
+    }
+
+    private fun forgetSavedTrip() {
+        lastSavedKey = null
+        _tripSaved.value = false
+    }
+
+    /**
+     * Поездку не замеряли по часам, поэтому обе отметки — момент записи.
+     * Момент записи ещё и её ключ в истории.
+     */
+    private fun buildRecord(key: Long, profile: Profile, input: CalcInput): TripRecord {
         val fare = profile.calculateFare(
             distanceKm = input.distanceKm,
             idleSeconds = input.idleSeconds,
             services = input.services,
             servicePrices = taxi.storage.settings.value.servicePrices,
         )
-
-        // Поездку не замеряли по часам, поэтому обе отметки — момент
-        // записи. Момент записи ещё и ключ записи в истории.
-        val now = System.currentTimeMillis()
-        taxi.storage.addTrip(
-            TripRecord(
-                startedAtWallMs = now,
-                finishedAtWallMs = now,
-                distanceKm = fare.distanceKm,
-                runningMs = 0L,
-                idleMs = input.idleSeconds * 1000L,
-                total = fare.total,
-                profileName = profile.name,
-                services = input.services.map { it.title },
-                payment = payment.name,
-                servicesTotal = fare.servicesPart,
-                coarseKm = taxi.meter.snapshot.value.coarseKm,
-            )
+        return TripRecord(
+            startedAtWallMs = key,
+            finishedAtWallMs = key,
+            distanceKm = fare.distanceKm,
+            runningMs = 0L,
+            idleMs = input.idleSeconds * 1000L,
+            total = fare.total,
+            profileName = profile.name,
+            services = input.services.map { it.title },
+            payment = input.payment?.name ?: "",
+            servicesTotal = fare.servicesPart,
+            coarseKm = taxi.meter.snapshot.value.coarseKm,
         )
-
-        _toast.value = "Збережено: ${String.format(Locale.US, "%.2f", fare.total)} грн"
-        resetCalc()
-        return true
     }
 
     /** Убрать поездку из истории и из статистики. */
@@ -180,6 +229,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _toast.value = "Дозвольте доступ до місцезнаходження"
             return false
         }
+        forgetSavedTrip()
         taxi.meter.start()
         taxi.gps.setCoarseEnabled(taxi.storage.settings.value.coarseEnabled)
         taxi.gps.start()
@@ -204,7 +254,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val result = taxi.meter.stop()
         taxi.gps.stop()
         MeterService.stop(getApplication())
-        if (write) writeToCalc(result)
+        if (write) {
+            writeToCalc(result)
+            // Поездку, посчитанную счётчиком, сохраняем сами
+            recordTrip()
+        }
     }
 
     /** Живые показания счётчика видны прямо в полях калькулятора. */
