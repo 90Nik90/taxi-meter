@@ -24,6 +24,7 @@ class TaxiApp : Application() {
 
         // Единственный источник расстояния: выборки скорости с GPS
         gps.onSpeedSample = { kmh, atMs -> meter.onSpeedSample(kmh, atMs) }
+        gps.onCoarseDistance = { km -> meter.onCoarseDistance(km) }
         gps.onFixLost = { meter.onFixLost() }
 
         createChannel()

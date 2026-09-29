@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     gpsEnabled: Boolean,
     onGpsEnabledChange: (Boolean) -> Unit,
+    coarseEnabled: Boolean,
+    onCoarseEnabledChange: (Boolean) -> Unit,
     onOpenProfiles: () -> Unit,
     onOpenServices: () -> Unit,
     onBack: () -> Unit,
@@ -64,6 +66,16 @@ fun SettingsScreen(
                 checked = gpsEnabled,
                 onCheckedChange = onGpsEnabledChange,
             )
+            if (gpsEnabled) {
+                SwitchRow(
+                    title = "Рахувати приблизно без супутників",
+                    subtitle = "Коли сигнал глушать, відстань рахується по вежах " +
+                        "і Wi-Fi. Точність гірша, тому такі кілометри позначаються " +
+                        "як приблизні",
+                    checked = coarseEnabled,
+                    onCheckedChange = onCoarseEnabledChange,
+                )
+            }
             SettingsRow(
                 title = "Тарифи",
                 subtitle = "Ціна за км, простій, мінімальна ціна",

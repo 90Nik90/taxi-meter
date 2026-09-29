@@ -125,6 +125,8 @@ fun TaxiRoot(
                     vm.setGpsEnabled(enabled)
                     if (enabled && !vm.hasLocationPermission()) onRequestLocationPermission()
                 },
+                coarseEnabled = settings.coarseEnabled,
+                onCoarseEnabledChange = vm::setCoarseEnabled,
                 onOpenProfiles = { go(Screen.PROFILES) },
                 onOpenServices = { go(Screen.SERVICE_PRICES) },
                 onBack = back,

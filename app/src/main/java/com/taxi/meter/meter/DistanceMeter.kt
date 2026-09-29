@@ -21,6 +21,8 @@ data class MeterSnapshot(
     val state: MeterState = MeterState.IDLE,
     /** Пройденное расстояние, км */
     val distanceKm: Double = 0.0,
+    /** Сколько из него насчитано грубо, без спутников, км */
+    val coarseKm: Double = 0.0,
     /** Время на паузе, мс */
     val idleMs: Long = 0,
     /** Текущая скорость, км/ч — для подписи на экране */
@@ -50,6 +52,7 @@ class DistanceMeter {
 
     private var state = MeterState.IDLE
     private var km = 0.0
+    private var coarseKm = 0.0
     private var idleAccumMs = 0L
 
     /** Момент последней смены состояния, elapsedRealtime, мс */
@@ -63,6 +66,7 @@ class DistanceMeter {
 
     fun start() = synchronized(lock) {
         km = 0.0
+        coarseKm = 0.0
         idleAccumMs = 0
         lastSpeed = null
         lastSampleMs = 0
@@ -104,6 +108,7 @@ class DistanceMeter {
     fun reset() = synchronized(lock) {
         state = MeterState.IDLE
         km = 0.0
+        coarseKm = 0.0
         idleAccumMs = 0
         lastSpeed = null
         lastSampleMs = 0
@@ -142,6 +147,19 @@ class DistanceMeter {
         publish()
     }
 
+    /**
+     * Кусок пути, посчитанный грубо по сетевым точкам.
+     *
+     * Приходит уже в километрах: скорости у таких точек нет,
+     * интегрировать нечего.
+     */
+    fun onCoarseDistance(deltaKm: Double) = synchronized(lock) {
+        if (state != MeterState.RUNNING || deltaKm <= 0.0) return@synchronized
+        km += deltaKm
+        coarseKm += deltaKm
+        publish()
+    }
+
     /** Сигнал пропал: интегрировать через разрыв нельзя. */
     fun onFixLost() = synchronized(lock) {
         lastSpeed = null
@@ -160,6 +178,7 @@ class DistanceMeter {
         _snapshot.value = MeterSnapshot(
             state = state,
             distanceKm = km,
+            coarseKm = coarseKm,
             idleMs = idle,
             speedKmh = speedKmh,
         )

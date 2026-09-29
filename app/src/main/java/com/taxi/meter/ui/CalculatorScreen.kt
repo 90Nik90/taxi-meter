@@ -109,7 +109,12 @@ fun CalculatorScreen(
             },
         )
 
-        if (gpsEnabled && meter.isActive && gps.signal != GpsSignal.OK) SignalWarning(gps)
+        if (gpsEnabled && meter.isActive) {
+            // Пока считаем грубо, полоса не ругается на сигнал: он и не
+            // нужен. Но водитель должен видеть, что сумма приблизительная.
+            if (gps.coarse) CoarseBanner()
+            else if (gps.signal != GpsSignal.OK) SignalWarning(gps)
+        }
 
         Column(
             modifier = Modifier
@@ -154,6 +159,19 @@ fun CalculatorScreen(
                     onPause = onPauseMeter,
                     onResume = onResumeMeter,
                     onStop = onStopMeter,
+                )
+            }
+
+            // Итог остаётся честным и после «Стоп»: видно, какая часть
+            // пути посчитана без спутников.
+            if (meter.coarseKm > 0.0) {
+                Text(
+                    text = "З них ${fmt(meter.coarseKm)} км пораховано приблизно, " +
+                        "без супутників",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MeterColors.accent,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                 )
             }
 
@@ -284,6 +302,27 @@ private fun MeterButton(
             maxFontSize = 15.sp,
             modifier = Modifier.weight(1f, fill = false),
             fontWeight = FontWeight.Bold,
+        )
+    }
+}
+
+/** Спутников нет, считаем по вышкам и Wi-Fi — сумма приблизительная. */
+@Composable
+private fun CoarseBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(MeterColors.accent.copy(alpha = 0.16f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "ПРИБЛИЗНО · немає супутників, рахуємо по вежах і Wi-Fi",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MeterColors.accent,
         )
     }
 }

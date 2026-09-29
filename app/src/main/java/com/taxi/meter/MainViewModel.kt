@@ -73,6 +73,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!enabled) stopMeter(write = false)
     }
 
+    /** Галочка «рахувати приблизно, коли немає супутників». */
+    fun setCoarseEnabled(enabled: Boolean) {
+        taxi.storage.updateSettings { it.copy(coarseEnabled = enabled) }
+        taxi.gps.setCoarseEnabled(enabled)
+    }
+
     // --- Калькулятор -----------------------------------------------------
 
     fun setDistance(text: String) {
@@ -110,6 +116,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         taxi.meter.start()
+        taxi.gps.setCoarseEnabled(taxi.storage.settings.value.coarseEnabled)
         taxi.gps.start()
         MeterService.start(getApplication())
         pushMeterIntoCalc()

@@ -18,6 +18,8 @@ enum class GpsSignal {
  */
 data class GpsStatus(
     val signal: GpsSignal = GpsSignal.NONE,
+    /** Считаем грубо по вышкам и Wi-Fi: спутников нет */
+    val coarse: Boolean = false,
     /** Заявленная погрешность последней точки, м; 0 — неизвестна */
     val accuracyM: Int = 0,
     /** Сколько точек пришло с момента запуска — видно, идёт ли поток вообще */

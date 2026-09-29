@@ -19,26 +19,34 @@ import com.google.android.gms.location.Priority
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.max
 
 /**
- * Скорость с GPS-приёмника телефона.
+ * Положение телефона из всех источников, какие есть.
  *
- * Слушает сразу два источника: приёмник напрямую через системный
- * LocationManager и сглаженный поток Google Play Services. На разных
- * телефонах молчать может любой из них, а точки нужны хоть откуда —
- * поэтому подписки две, а дубли отсеиваются по метке времени.
+ * Слушает сразу три: спутниковый приёмник напрямую, положение по
+ * вышкам и Wi-Fi, и сглаженный поток Google Play Services. На разных
+ * телефонах молчать может любой из них, а во время глушения спутников
+ * остаётся только сетевой — поэтому подписок несколько, а дубли
+ * отсеиваются по метке времени замера.
  *
- * Наружу отдаются только пары «скорость — метка времени»: расстояние
- * считает [com.taxi.meter.meter.DistanceMeter]. Координаты никуда не
- * уходят и нигде не сохраняются.
+ * Наружу отдаются два разных сигнала. Пока спутники живы — скорость,
+ * которую [com.taxi.meter.meter.DistanceMeter] интегрирует в расстояние.
+ * Когда спутников нет и разрешён грубый режим — сразу куски
+ * расстояния между сетевыми точками.
+ *
+ * Координаты никуда не уходят и нигде не сохраняются.
  */
 class GpsSource(private val context: Context) {
 
     private val fused = LocationServices.getFusedLocationProviderClient(context)
     private val manager = context.getSystemService(LocationManager::class.java)
 
-    /** Новая выборка: скорость в км/ч и метка elapsedRealtime. */
+    /** Выборка скорости со спутников: км/ч и метка elapsedRealtime. */
     var onSpeedSample: ((Double, Long) -> Unit)? = null
+
+    /** Кусок пути, посчитанный грубо по сетевым точкам, км. */
+    var onCoarseDistance: ((Double) -> Unit)? = null
 
     /** Сигнал пропал — интегрировать через разрыв нельзя. */
     var onFixLost: (() -> Unit)? = null
@@ -50,12 +58,31 @@ class GpsSource(private val context: Context) {
 
     private var running = false
 
+    /** Разрешено ли считать грубо, когда спутников нет */
+    private var coarseEnabled = false
+
+    /** Считаем ли грубо прямо сейчас */
+    private var coarseActive = false
+
     /** Предыдущая точка: из неё берём скорость, если приёмник её не дал. */
     private var lastLocation: Location? = null
     private var lastAtMs = 0L
 
     /** Момент последней принятой точки, elapsedRealtime */
     private var lastGoodMs = 0L
+
+    /** Момент последней спутниковой точки — по нему решаем о переходе */
+    private var lastPreciseMs = 0L
+
+    /** Сколько спутниковых точек подряд — чтобы не выходить из грубого по одной */
+    private var preciseStreak = 0
+
+    private var startedAtMs = 0L
+
+    /** Опорная точка грубого режима */
+    private var coarseAnchor: Location? = null
+    private var coarseAnchorAccuracy = 0f
+    private var coarseAnchorMs = 0L
 
     /** Метка последней обработанной точки — по ней отсеиваем дубли */
     private var lastSeenNanos = 0L
@@ -72,8 +99,8 @@ class GpsSource(private val context: Context) {
         }
     }
 
-    private val directListener = object : LocationListener {
-        override fun onLocationChanged(location: Location) = handle(location, "gps")
+    private fun listenerFor(tag: String) = object : LocationListener {
+        override fun onLocationChanged(location: Location) = handle(location, tag)
 
         // На Android ниже 30 у этих методов нет реализации по умолчанию:
         // без них подписка падает с AbstractMethodError.
@@ -83,6 +110,9 @@ class GpsSource(private val context: Context) {
         override fun onProviderEnabled(provider: String) = Unit
         override fun onProviderDisabled(provider: String) = Unit
     }
+
+    private val satelliteListener = listenerFor("gps")
+    private val networkListener = listenerFor("мережа")
 
     fun hasPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -95,12 +125,27 @@ class GpsSource(private val context: Context) {
             m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }
 
+    /** Галочка «рахувати приблизно, коли немає супутників». */
+    fun setCoarseEnabled(enabled: Boolean) {
+        coarseEnabled = enabled
+        if (!enabled && coarseActive) {
+            coarseActive = false
+            breakChains()
+            publish(GpsSignal.NONE)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun start() {
         if (running || !hasPermission()) return
         running = true
+        startedAtMs = SystemClock.elapsedRealtime()
         lastLocation = null
+        coarseAnchor = null
+        coarseActive = false
+        preciseStreak = 0
         lastGoodMs = 0
+        lastPreciseMs = 0
         lastSeenNanos = 0
         fixCount = 0
         rejectedCount = 0
@@ -110,17 +155,10 @@ class GpsSource(private val context: Context) {
         publish(GpsSignal.NONE)
 
         // Приёмник напрямую: работает и там, где сервисы Google молчат
-        try {
-            manager?.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                INTERVAL_MS,
-                0f,
-                directListener,
-                Looper.getMainLooper(),
-            )
-        } catch (e: Exception) {
-            error = "GPS: ${e.javaClass.simpleName}"
-        }
+        subscribe(LocationManager.GPS_PROVIDER, satelliteListener)
+
+        // Вышки и Wi-Fi: единственное, что остаётся при глушении спутников
+        subscribe(LocationManager.NETWORK_PROVIDER, networkListener)
 
         // И сглаженный поток Play Services, если они на телефоне есть
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, INTERVAL_MS)
@@ -141,11 +179,29 @@ class GpsSource(private val context: Context) {
         publish(GpsSignal.NONE)
     }
 
+    @SuppressLint("MissingPermission")
+    private fun subscribe(provider: String, listener: LocationListener) {
+        try {
+            manager?.requestLocationUpdates(
+                provider,
+                INTERVAL_MS,
+                0f,
+                listener,
+                Looper.getMainLooper(),
+            )
+        } catch (e: Exception) {
+            error = "$provider: ${e.javaClass.simpleName}"
+        }
+    }
+
     fun stop() {
         if (!running) return
         running = false
         lastLocation = null
-        runCatching { manager?.removeUpdates(directListener) }
+        coarseAnchor = null
+        coarseActive = false
+        runCatching { manager?.removeUpdates(satelliteListener) }
+        runCatching { manager?.removeUpdates(networkListener) }
         runCatching { fused.removeLocationUpdates(fusedCallback) }
         onFixLost?.invoke()
         publish(GpsSignal.NONE)
@@ -169,7 +225,7 @@ class GpsSource(private val context: Context) {
     }
 
     private fun handle(location: Location, from: String) {
-        // Один и тот же замер приходит обоими путями — считаем его раз
+        // Один и тот же замер приходит разными путями — считаем его раз
         val stamp = location.elapsedRealtimeNanos
         if (stamp <= lastSeenNanos) return
         lastSeenNanos = stamp
@@ -185,26 +241,87 @@ class GpsSource(private val context: Context) {
         val nowMs = stamp / 1_000_000L
         if (SystemClock.elapsedRealtime() - nowMs > MAX_FIX_AGE_MS) {
             rejectedCount++
-            publish(GpsSignal.WEAK)
+            publish(_status.value.signal)
             return
         }
 
-        // Грубые точки только портят расчёт: пока приёмник не поймал
-        // спутники, система подсовывает положение по вышкам и Wi-Fi
-        // с погрешностью в сотни метров — по ней километры не посчитать.
-        if (accuracy > MAX_ACCURACY_M) {
+        // Точная выборка — та, где приёмник сам назвал скорость: она
+        // считается по доплеровскому сдвигу и на стоянке равна нулю.
+        // Сетевое положение скорости не даёт, его считаем грубым.
+        val precise = accuracy <= MAX_ACCURACY_M && location.hasSpeed()
+        updateMode(nowMs, precise)
+
+        if (precise && !coarseActive) {
+            handlePrecise(location, nowMs)
+            return
+        }
+
+        if (!coarseActive) {
+            // Грубый режим выключен или ещё не пришло его время —
+            // такую точку просто не считаем.
             rejectedCount++
             onFixLost?.invoke()
             publish(GpsSignal.WEAK)
             return
         }
 
+        if (accuracy > MAX_COARSE_ACCURACY_M) {
+            rejectedCount++
+            publish(GpsSignal.WEAK)
+            return
+        }
+
+        handleCoarse(location, accuracy, nowMs)
+    }
+
+    /**
+     * Решает, каким способом считать.
+     *
+     * В грубый режим уходим только после долгого молчания спутников:
+     * под мостом и между высотками сигнал пропадает на пару секунд,
+     * и дёргаться туда-сюда на каждом таком провале нельзя.
+     * Обратно — после нескольких точек подряд, чтобы одна подделка
+     * не выдернула нас из грубого режима.
+     */
+    private fun updateMode(nowMs: Long, precise: Boolean) {
+        if (precise) {
+            lastPreciseMs = nowMs
+            preciseStreak++
+            if (coarseActive && preciseStreak >= PRECISE_STREAK) {
+                coarseActive = false
+                breakChains()
+            }
+            return
+        }
+
+        preciseStreak = 0
+        if (coarseActive || !coarseEnabled) return
+
+        val since = if (lastPreciseMs == 0L) startedAtMs else lastPreciseMs
+        if (nowMs - since > SWITCH_TO_COARSE_MS) {
+            coarseActive = true
+            breakChains()
+        }
+    }
+
+    /**
+     * Рвёт цепочку при смене способа счёта.
+     *
+     * Сетевая точка смещена относительно спутниковой на десятки метров,
+     * и если сложить последнюю точку одного источника с первой точкой
+     * другого, в счёт попадёт сотня метров, которых не проезжали.
+     * Лучше недосчитать слепой участок, чем выдумать его.
+     */
+    private fun breakChains() {
+        lastLocation = null
+        coarseAnchor = null
+        onFixLost?.invoke()
+    }
+
+    private fun handlePrecise(location: Location, nowMs: Long) {
         val previous = lastLocation
 
         val speedMs = when {
-            // Приёмник считает скорость по доплеровскому сдвигу — она
-            // точнее, чем расстояние между двумя точками, и на стоянке
-            // честно равна нулю.
             location.hasSpeed() -> location.speed.toDouble()
 
             // Запасной путь для приёмников, которые скорость не отдают
@@ -244,12 +361,64 @@ class GpsSource(private val context: Context) {
         publish(GpsSignal.OK)
     }
 
+    /**
+     * Грубый счёт по сетевым точкам.
+     *
+     * Скорости у них нет, поэтому расстояние берётся прямо между
+     * точками. Отрезок засчитывается, только если он заметно больше
+     * погрешности обеих точек: иначе стояние в пробке накрутило бы
+     * километры из одного дрожания координат.
+     */
+    private fun handleCoarse(location: Location, accuracy: Float, nowMs: Long) {
+        val anchor = coarseAnchor
+        if (anchor == null) {
+            coarseAnchor = location
+            coarseAnchorAccuracy = accuracy
+            coarseAnchorMs = nowMs
+            lastGoodMs = nowMs
+            publish(GpsSignal.OK)
+            return
+        }
+
+        val meters = anchor.distanceTo(location).toDouble()
+        val threshold = max(
+            MIN_COARSE_STEP_M,
+            ((coarseAnchorAccuracy + accuracy) * COARSE_FACTOR).toDouble(),
+        )
+
+        lastGoodMs = nowMs
+
+        if (meters < threshold) {
+            // Ещё не уехали дальше собственной погрешности — это не движение
+            publish(GpsSignal.OK)
+            return
+        }
+
+        val dtSec = (nowMs - coarseAnchorMs) / 1000.0
+        val kmh = if (dtSec > 0) meters / dtSec * 3.6 else 0.0
+        if (kmh > MAX_SPEED_KMH) {
+            rejectedCount++
+            coarseAnchor = location
+            coarseAnchorAccuracy = accuracy
+            coarseAnchorMs = nowMs
+            publish(GpsSignal.WEAK)
+            return
+        }
+
+        onCoarseDistance?.invoke(meters / 1000.0)
+        coarseAnchor = location
+        coarseAnchorAccuracy = accuracy
+        coarseAnchorMs = nowMs
+        publish(GpsSignal.OK)
+    }
+
     private fun publish(signal: GpsSignal) {
         val ago = if (lastGoodMs == 0L) -1
         else ((SystemClock.elapsedRealtime() - lastGoodMs) / 1000).toInt()
 
         _status.value = GpsStatus(
             signal = signal,
+            coarse = coarseActive,
             accuracyM = lastAccuracyM,
             fixCount = fixCount,
             rejectedCount = rejectedCount,
@@ -269,11 +438,14 @@ class GpsSource(private val context: Context) {
         const val MIN_INTERVAL_MS = 500L
 
         /**
-         * Хуже этой погрешности точку не берём, м. Порог мягче, чем
-         * хочется: пока спутники не пойманы, система отдаёт положение
+         * Хуже этой погрешности точка на точную не тянет, м. Порог мягче,
+         * чем хочется: пока спутники не пойманы, система отдаёт положение
          * по вышкам, и в идеальные 10 метров приёмник попадает не сразу.
          */
         const val MAX_ACCURACY_M = 50f
+
+        /** Грубее этого не считаем даже приблизительно, м */
+        const val MAX_COARSE_ACCURACY_M = 200f
 
         /** Ниже этой скорости считаем, что машина стоит, км/ч */
         const val MIN_SPEED_KMH = 2.0
@@ -286,5 +458,17 @@ class GpsSource(private val context: Context) {
 
         /** Точка старше этого — из кеша, ей верить нельзя, мс */
         const val MAX_FIX_AGE_MS = 10_000L
+
+        /** Столько без спутников — переходим на грубый счёт, мс */
+        const val SWITCH_TO_COARSE_MS = 20_000L
+
+        /** Столько спутниковых точек подряд — возвращаемся к точному счёту */
+        const val PRECISE_STREAK = 2
+
+        /** Короче этого отрезок в грубом режиме не считаем, м */
+        const val MIN_COARSE_STEP_M = 100.0
+
+        /** Во столько раз отрезок должен превышать погрешность точек */
+        const val COARSE_FACTOR = 1.5f
     }
 }
