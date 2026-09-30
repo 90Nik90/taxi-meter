@@ -75,7 +75,8 @@ fun CalculatorScreen(
     input: CalcInput,
     meter: MeterSnapshot,
     gps: GpsStatus,
-    gpsEnabled: Boolean,
+    meterEnabled: Boolean,
+    networkOnly: Boolean,
     tripSaved: Boolean,
     onDistanceChange: (String) -> Unit,
     onIdleChange: (String) -> Unit,
@@ -96,7 +97,7 @@ fun CalculatorScreen(
 
     // Со счётчиком поля заполняет он: руками их не трогаем совсем,
     // а до старта в них стоят нули, а не пустота.
-    val locked = gpsEnabled
+    val locked = meterEnabled
 
     Column(
         modifier = Modifier
@@ -122,10 +123,10 @@ fun CalculatorScreen(
             },
         )
 
-        if (gpsEnabled && meter.isActive) {
+        if (meterEnabled && meter.isActive) {
             // Пока считаем грубо, полоса не ругается на сигнал: он и не
             // нужен. Но водитель должен видеть, что сумма приблизительная.
-            if (gps.coarse) CoarseBanner()
+            if (gps.coarse) CoarseBanner(networkOnly)
             else if (gps.signal != GpsSignal.OK) SignalWarning(gps)
         }
 
@@ -162,7 +163,7 @@ fun CalculatorScreen(
                 onDone = { focus.clearFocus() },
             )
 
-            if (gpsEnabled) {
+            if (meterEnabled) {
                 MeterControls(
                     state = meter.state,
                     speedKmh = meter.speedKmh,
@@ -208,7 +209,7 @@ fun CalculatorScreen(
             // Со счётчиком поездка сохраняется сама по «Стоп», поэтому
             // кнопки нет вовсе — только отметка, что запись уже сделана
             // и правки в полях дописываются в неё.
-            if (!gpsEnabled) {
+            if (!meterEnabled) {
                 Button(
                     onClick = {
                         focus.clearFocus()
@@ -368,7 +369,7 @@ private fun MeterButton(
 
 /** Спутников нет, считаем по вышкам и Wi-Fi — сумма приблизительная. */
 @Composable
-private fun CoarseBanner() {
+private fun CoarseBanner(networkOnly: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -379,7 +380,10 @@ private fun CoarseBanner() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "ПРИБЛИЗНО · немає супутників, рахуємо по вежах і Wi-Fi",
+            // Когда сетевой режим включён галочкой, про спутники писать
+            // нечего: их не слушают по решению водителя, а не из-за глушения
+            text = if (networkOnly) "ПРИБЛИЗНО · рахуємо тільки по вежах і Wi-Fi"
+            else "ПРИБЛИЗНО · немає супутників, рахуємо по вежах і Wi-Fi",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Bold,
             color = MeterColors.accent,
@@ -405,11 +409,16 @@ private fun SignalWarning(gps: GpsStatus) {
             "Супутниковий приймач вимкнено — у налаштуваннях місцезнаходження " +
                 "виберіть режим «Висока точність»"
 
-        gps.signal == GpsSignal.WEAK && gps.accuracyM > 0 ->
-            "Сигнал занадто слабкий (похибка ${gps.accuracyM} м) — кілометри не рахуються"
-
+        // Ни одной точки — приёмник ещё не проснулся, а не заглушен
         gps.fixCount == 0 ->
             "Чекаємо на супутники — кілометри поки не рахуються"
+
+        // Запасной способ уже на подходе — это не поломка, а ожидание
+        gps.coarseInSec >= 0 ->
+            "Немає сигналу GPS · переходимо на вежі за ${gps.coarseInSec} с"
+
+        gps.signal == GpsSignal.WEAK && gps.accuracyM > 0 ->
+            "Сигнал занадто слабкий (похибка ${gps.accuracyM} м) — кілометри не рахуються"
 
         else ->
             "Сигнал зник — кілометри не рахуються"
@@ -646,7 +655,7 @@ private fun SavedNote() {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = "Збережено в статистику — відмітьте оплату, запис оновиться",
+            text = "Поїздку збережено в статистику",
             style = MaterialTheme.typography.bodySmall,
             color = MeterColors.go,
         )

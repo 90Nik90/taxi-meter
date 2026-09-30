@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +35,8 @@ fun SettingsScreen(
     onGpsEnabledChange: (Boolean) -> Unit,
     coarseEnabled: Boolean,
     onCoarseEnabledChange: (Boolean) -> Unit,
+    networkOnly: Boolean,
+    onNetworkOnlyChange: (Boolean) -> Unit,
     onOpenProfiles: () -> Unit,
     onOpenServices: () -> Unit,
     onBack: () -> Unit,
@@ -61,23 +64,40 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SwitchRow(
-                title = "Лічильник по GPS",
-                subtitle = "Відстань рахується сама під час поїздки — " +
-                    "на калькуляторі з’являються «Почати поїздку» і «Стоп»",
-                checked = gpsEnabled,
-                onCheckedChange = onGpsEnabledChange,
-            )
-            if (gpsEnabled) {
-                SwitchRow(
-                    title = "Рахувати приблизно без супутників",
-                    subtitle = "Коли сигнал глушать, відстань рахується по вежах " +
-                        "і Wi-Fi. Точність гірша, тому такі кілометри позначаються " +
-                        "як приблизні",
-                    checked = coarseEnabled,
-                    onCheckedChange = onCoarseEnabledChange,
+            SectionCard {
+                SwitchLine(
+                    title = "Лічильник по GPS",
+                    subtitle = "Відстань рахується сама під час поїздки — " +
+                        "на калькуляторі з’являються «Почати поїздку» і «Стоп»",
+                    checked = gpsEnabled,
+                    onCheckedChange = onGpsEnabledChange,
                 )
+                // Запасной путь подчинён счётчику: без него считать нечего,
+                // поэтому галочка живёт в его же карточке
+                if (gpsEnabled) {
+                    HorizontalDivider(
+                        // Карточка уже расставляет 8 dp между строками
+                        modifier = Modifier.padding(vertical = 6.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    SwitchLine(
+                        title = "Рахувати по вежах, коли зникає сигнал",
+                        subtitle = "Якщо супутники замовкли, відстань рахується по вежах " +
+                            "і Wi-Fi. Точність гірша, тому такі кілометри позначаються " +
+                            "як приблизні",
+                        checked = coarseEnabled,
+                        onCheckedChange = onCoarseEnabledChange,
+                    )
+                }
             }
+            SwitchRow(
+                title = "Тільки Wi-Fi та вежі",
+                subtitle = "Супутники не слухаємо зовсім. Вмикайте на час тривоги: " +
+                    "відстань рахується приблизно з першої секунди, без 20 секунд " +
+                    "очікування супутників",
+                checked = networkOnly,
+                onCheckedChange = onNetworkOnlyChange,
+            )
             SettingsRow(
                 title = "Тарифи",
                 subtitle = "Ціна за км, простій, мінімальна ціна",
@@ -108,21 +128,35 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    SectionCard(modifier = Modifier.clickable { onCheckedChange(!checked) }) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+    // Нажатие ловит сама строка, иначе на карточке было бы два обработчика
+    SectionCard {
+        SwitchLine(title, subtitle, checked, onCheckedChange)
+    }
+}
+
+/** Строка с выключателем; карточку вокруг неё рисует вызывающий. */
+@Composable
+private fun SwitchLine(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

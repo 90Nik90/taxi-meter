@@ -138,7 +138,8 @@ fun TaxiRoot(
                     input = calc,
                     meter = meter,
                     gps = gps,
-                    gpsEnabled = settings.gpsEnabled,
+                    meterEnabled = settings.gpsEnabled || settings.networkOnly,
+                    networkOnly = settings.networkOnly,
                     tripSaved = tripSaved,
                     onDistanceChange = vm::setDistance,
                     onIdleChange = vm::setIdleMinutes,
@@ -213,6 +214,12 @@ fun TaxiRoot(
                 },
                 coarseEnabled = settings.coarseEnabled,
                 onCoarseEnabledChange = vm::setCoarseEnabled,
+                networkOnly = settings.networkOnly,
+                onNetworkOnlyChange = { enabled ->
+                    vm.setNetworkOnly(enabled)
+                    // Положение по вышкам и Wi-Fi спрашивает то же разрешение
+                    if (enabled && !vm.hasLocationPermission()) onRequestLocationPermission()
+                },
                 onOpenProfiles = { go(Screen.PROFILES) },
                 onOpenServices = { go(Screen.SERVICE_PRICES) },
                 onBack = back,

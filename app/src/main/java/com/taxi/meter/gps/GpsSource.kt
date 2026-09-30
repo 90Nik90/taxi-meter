@@ -61,6 +61,9 @@ class GpsSource(private val context: Context) {
     /** Разрешено ли считать грубо, когда спутников нет */
     private var coarseEnabled = false
 
+    /** Слушать только сеть: спутники не запрашиваем и не ждём */
+    private var networkOnly = false
+
     /** Считаем ли грубо прямо сейчас */
     private var coarseActive = false
 
@@ -125,10 +128,26 @@ class GpsSource(private val context: Context) {
             m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }
 
+    /**
+     * Галочка «тільки Wi-Fi та вежі».
+     *
+     * Во время тревоги ждать двадцать секунд молчания незачем: водитель
+     * и так знает, что спутников не будет. Тогда приёмник не слушаем
+     * вовсе и считаем по сети с первой точки.
+     */
+    fun setNetworkOnly(enabled: Boolean) {
+        if (networkOnly == enabled) return
+        networkOnly = enabled
+        if (!running) return
+        // Смена способа посреди поездки: подписки и цепочку заводим заново
+        stop()
+        start()
+    }
+
     /** Галочка «рахувати приблизно, коли немає супутників». */
     fun setCoarseEnabled(enabled: Boolean) {
         coarseEnabled = enabled
-        if (!enabled && coarseActive) {
+        if (!enabled && coarseActive && !networkOnly) {
             coarseActive = false
             breakChains()
             publish(GpsSignal.NONE)
@@ -142,7 +161,8 @@ class GpsSource(private val context: Context) {
         startedAtMs = SystemClock.elapsedRealtime()
         lastLocation = null
         coarseAnchor = null
-        coarseActive = false
+        // В сетевом режиме точного счёта не будет вовсе, ждать нечего
+        coarseActive = networkOnly
         preciseStreak = 0
         lastGoodMs = 0
         lastPreciseMs = 0
@@ -155,13 +175,16 @@ class GpsSource(private val context: Context) {
         publish(GpsSignal.NONE)
 
         // Приёмник напрямую: работает и там, где сервисы Google молчат
-        subscribe(LocationManager.GPS_PROVIDER, satelliteListener)
+        if (!networkOnly) subscribe(LocationManager.GPS_PROVIDER, satelliteListener)
 
         // Вышки и Wi-Fi: единственное, что остаётся при глушении спутников
         subscribe(LocationManager.NETWORK_PROVIDER, networkListener)
 
-        // И сглаженный поток Play Services, если они на телефоне есть
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, INTERVAL_MS)
+        // И сглаженный поток Play Services, если они на телефоне есть.
+        // В сетевом режиме просим их не будить приёмник.
+        val priority = if (networkOnly) Priority.PRIORITY_BALANCED_POWER_ACCURACY
+        else Priority.PRIORITY_HIGH_ACCURACY
+        val request = LocationRequest.Builder(priority, INTERVAL_MS)
             .setMinUpdateIntervalMillis(MIN_INTERVAL_MS)
             .setWaitForAccurateLocation(false)
             .build()
@@ -248,7 +271,7 @@ class GpsSource(private val context: Context) {
         // Точная выборка — та, где приёмник сам назвал скорость: она
         // считается по доплеровскому сдвигу и на стоянке равна нулю.
         // Сетевое положение скорости не даёт, его считаем грубым.
-        val precise = accuracy <= MAX_ACCURACY_M && location.hasSpeed()
+        val precise = !networkOnly && accuracy <= MAX_ACCURACY_M && location.hasSpeed()
         updateMode(nowMs, precise)
 
         if (precise && !coarseActive) {
@@ -284,6 +307,9 @@ class GpsSource(private val context: Context) {
      * не выдернула нас из грубого режима.
      */
     private fun updateMode(nowMs: Long, precise: Boolean) {
+        // Сетевой режим включён водителем — из него сами не выходим
+        if (networkOnly) return
+
         if (precise) {
             lastPreciseMs = nowMs
             preciseStreak++
@@ -412,12 +438,27 @@ class GpsSource(private val context: Context) {
         publish(GpsSignal.OK)
     }
 
+    /**
+     * Сколько секунд осталось до перехода на вышки.
+     *
+     * Ждать двадцать секунд молча нельзя: замерший счётчик и полоса
+     * «кілометри не рахуються» выглядят как поломка, хотя запасной
+     * способ уже на подходе.
+     */
+    private fun coarseCountdown(): Int {
+        if (!running || coarseActive || networkOnly || !coarseEnabled) return -1
+        val since = if (lastPreciseMs == 0L) startedAtMs else lastPreciseMs
+        val left = SWITCH_TO_COARSE_MS - (SystemClock.elapsedRealtime() - since)
+        return if (left <= 0) 0 else ((left + 999) / 1000).toInt()
+    }
+
     private fun publish(signal: GpsSignal) {
         val ago = if (lastGoodMs == 0L) -1
         else ((SystemClock.elapsedRealtime() - lastGoodMs) / 1000).toInt()
 
         _status.value = GpsStatus(
             signal = signal,
+            coarseInSec = coarseCountdown(),
             coarse = coarseActive,
             accuracyM = lastAccuracyM,
             fixCount = fixCount,

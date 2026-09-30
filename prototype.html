@@ -150,6 +150,15 @@
   .card.tap:active { background: #263040; }
   .card.tap.sel { border-color: var(--m-go); }
 
+  /* Галочка внутри чужой карточки: подчинена той, что сверху */
+  .subrow {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--m-outline);
+    cursor: pointer;
+  }
+  .subrow:hover { opacity: .85; }
+
   .row { display: flex; align-items: center; gap: 8px; }
   .grow { flex: 1; min-width: 0; }
 
@@ -739,6 +748,7 @@
         activeId: S.activeId,
         gpsEnabled: S.gpsEnabled,
         coarseEnabled: S.coarseEnabled,
+        networkOnly: S.networkOnly,
         trips: S.trips,
         servicePrices: S.servicePrices
       }));
@@ -765,6 +775,8 @@
     gpsEnabled: stored ? !!stored.gpsEnabled : false,
     /* AppSettings.coarseEnabled — считать по вышкам без спутников */
     coarseEnabled: stored ? !!stored.coarseEnabled : false,
+    /* AppSettings.networkOnly — спутники не слушаем вовсе, только сеть */
+    networkOnly: stored ? !!stored.networkOnly : false,
     /* Только в прототипе: имитация глушения спутников */
     jammed: false,
     /* Сохранённые поездки, новые первыми */
@@ -776,7 +788,7 @@
     /* Выбранный столбик графика в статистике */
     pickedBucket: null,
     /* Запись, в которую ещё дописываются правки: null — нечего дописывать */
-    lastSavedKey: null,
+    tripSaved: false,
     /* Статистика: период и раскрытая поездка */
     statsPeriod: 'DAY',
     pendingTripDelete: null,
@@ -811,8 +823,9 @@
     const billedIdleMinutes = ceilUnits(Math.max(0, idleSeconds) / 60);
     const idlePart = billedIdleMinutes * p.pricePerIdleMinute;
 
-    // Каждый начатый километр сверх минимального расстояния — целиком
-    const billedKm = ceilUnits(km - p.minDistanceKm);
+    // Расстояние сверх минимального оплачивается по факту, до метра:
+    // на счётчике сумма растёт вместе с машиной, а не прыгает раз в километр
+    const billedKm = Math.max(0, km - p.minDistanceKm);
 
     // Доплати за послуги прибавляются к минимальной цене поездки
     const prices = servicePrices || defaultServicePrices();
@@ -825,7 +838,7 @@
     let distancePart, minApplied;
     if (p.minDistanceKm > 0) {
       distancePart = effectiveMinPrice + billedKm * p.pricePerKm;
-      minApplied = billedKm === 0;
+      minApplied = billedKm <= 0;
     } else {
       const raw = billedKm * p.pricePerKm;
       if (raw < effectiveMinPrice) { distancePart = effectiveMinPrice; minApplied = true; }
@@ -1024,6 +1037,9 @@
     return isFinite(v) && v > 0 ? v : 0;
   };
 
+  /** Счётчик есть, если включён хоть один способ: спутники или сеть */
+  const meterEnabled = () => S.gpsEnabled || S.networkOnly;
+
   const calcEmpty = () =>
     calcKm() <= 0 && calcMinutes() === 0 && !S.calc.services.length && !S.calc.payment;
 
@@ -1050,6 +1066,22 @@
   let jammedMs = 0;
   const SWITCH_TO_COARSE_MS = 20000;
 
+  /**
+   * Текст полосы о потерянном сигнале.
+   *
+   * Переход на вышки не мгновенный: под мостом сигнал пропадает на
+   * пару секунд, и дёргаться на каждом провале нельзя. Без обратного
+   * отсчёта это выглядит как поломка — водитель видит «не рахуються»
+   * и не знает, что приложение уже переключается.
+   */
+  function signalWarnText() {
+    if (S.meter.state === 'RUNNING' && S.coarseEnabled && !S.meter.coarse) {
+      const left = Math.max(1, Math.ceil((SWITCH_TO_COARSE_MS - jammedMs) / 1000));
+      return `Немає сигналу GPS · переходимо на вежі за ${left} с`;
+    }
+    return 'Немає сигналу GPS — кілометри не рахуються';
+  }
+
   function tick(now) {
     const dt = Math.min(400, now - lastReal);
     lastReal = now;
@@ -1058,7 +1090,12 @@
       // Пока спутники глушат, приложение ждёт 20 секунд и только
       // потом переходит на грубый счёт по вышкам и Wi-Fi.
       const wasCoarse = S.meter.coarse;
-      if (S.jammed) {
+      if (S.networkOnly) {
+        // Спутники не слушаем вовсе: считаем по сети с первой секунды,
+        // и глушение на это никак не влияет
+        jammedMs = 0;
+        S.meter.coarse = true;
+      } else if (S.jammed) {
         jammedMs += dt;
         S.meter.coarse = S.coarseEnabled && jammedMs > SWITCH_TO_COARSE_MS;
       } else {
@@ -1124,24 +1161,13 @@
   function recordTrip() {
     if (!activeProfile() || calcKm() <= 0) return;
     const key = Date.now();
-    S.lastSavedKey = key;
     S.trips = [tripFromCalc(key, true, S.meter.startedAt)].concat(S.trips).slice(0, 500);
     save();
     toast(`Збережено: ${fmt(fare().total)} грн`);
-  }
-
-  /**
-   * Пока запись остаётся текущей, правки дописываются в неё.
-   *
-   * Способ оплаты водитель отмечает уже после остановки, а километры
-   * иногда поправляет руками — заводить на это вторую запись незачем.
-   */
-  function syncLastTrip() {
-    if (!S.lastSavedKey) return;
-    const i = S.trips.findIndex(t => t.finishedAtWallMs === S.lastSavedKey);
-    if (i < 0) { S.lastSavedKey = null; return; }
-    S.trips[i] = tripFromCalc(S.lastSavedKey, S.trips[i].metered, S.trips[i].startedAtWallMs);
-    save();
+    // Поездка закрыта: всё, что набрал водитель, уже в записи. На экране
+    // это только мешает — половина перекочевала бы в следующую поездку.
+    S.calc = { distanceText: '', idleText: '', services: [], payment: null };
+    S.tripSaved = true;
   }
 
   /* ═══ Действия ═══ */
@@ -1165,14 +1191,17 @@
     resetCalc() {
       S.meter = { state: 'IDLE', km: 0, coarseKm: 0, idleMs: 0, speed: 0, coarse: false, startedAt: 0 };
       S.calc = { distanceText: '', idleText: '', services: [], payment: null };
-      S.lastSavedKey = null;
+      S.tripSaved = false;
       S.paymentDialog = false;
       render();
     },
 
     toggleGps() {
       S.gpsEnabled = !S.gpsEnabled;
-      if (!S.gpsEnabled) S.meter.state = 'IDLE';
+      // Способы считать друг друга исключают: включили один — гасим второй
+      if (S.gpsEnabled) { S.networkOnly = false; S.meter.coarse = false; }
+      // Счётчик останавливаем, только если не осталось ни одного способа
+      if (!meterEnabled()) S.meter.state = 'IDLE';
       save();
       render();
     },
@@ -1180,6 +1209,16 @@
     toggleCoarse() {
       S.coarseEnabled = !S.coarseEnabled;
       if (!S.coarseEnabled) S.meter.coarse = false;
+      save();
+      render();
+    },
+
+    /* Только сеть: спутники не слушаем ни секунды */
+    toggleNetworkOnly() {
+      S.networkOnly = !S.networkOnly;
+      if (S.networkOnly) S.gpsEnabled = false;
+      if (!meterEnabled()) S.meter.state = 'IDLE';
+      S.meter.coarse = S.networkOnly && S.meter.state !== 'IDLE';
       save();
       render();
     },
@@ -1197,17 +1236,19 @@
       if (!activeProfile()) { toast('Створіть тарифний профіль', 'error'); return; }
       S.meter = {
         state: 'RUNNING', km: 0, coarseKm: 0, idleMs: 0,
-        speed: DEMO_SPEED_KMH, coarse: false, startedAt: Date.now()
+        speed: DEMO_SPEED_KMH, coarse: S.networkOnly, startedAt: Date.now()
       };
       jammedMs = 0;
-      S.lastSavedKey = null;
+      S.tripSaved = false;
+      // Отметку оплаты не трогаем: водитель мог поставить её заранее,
+      // а из прошлой поездки она не придёт — та обнулила калькулятор
       meterToCalc();
       render();
     },
 
     selectPayment(key) {
       S.calc.payment = (S.calc.payment === key) ? null : key;
-      syncLastTrip();
+
       render();
     },
 
@@ -1242,10 +1283,7 @@
     resumeMeter() { S.meter.state = 'RUNNING'; render(); },
 
     /**
-     * Стоп: поездка сразу уходит в историю, а итог остаётся в полях.
-     *
-     * Способ оплаты водитель отмечает уже после остановки, поэтому
-     * запись потом дописывается — см. syncLastTrip.
+     * Стоп: сперва попап с оплатой, и только потом запись в историю.
      */
     stopMeter() {
       S.meter.state = 'IDLE';
@@ -1277,7 +1315,7 @@
       S.calc.services = S.calc.services.includes(key)
         ? S.calc.services.filter(k => k !== key)
         : S.calc.services.concat(key);
-      syncLastTrip();
+
       render();
     },
 
@@ -1629,15 +1667,18 @@
       </div>
     </div>`;
 
-    const toggle = (title, subtitle, on, act) => `<div class="card tap" data-act="${act}">
-      <div class="row">
+    /* Одна строка с выключателем; карточкой её оборачивает toggle */
+    const line = (title, subtitle, on, act, cls) =>
+      `<div class="row${cls ? ' ' + cls : ''}" data-act="${act}">
         <div class="grow">
           <div style="font-size:17px;font-weight:500">${title}</div>
           <div class="small">${subtitle}</div>
         </div>
         <span class="switch${on ? ' on' : ''}"><span class="knob"></span></span>
-      </div>
-    </div>`;
+      </div>`;
+
+    const toggle = (title, subtitle, on, act, extra) =>
+      `<div class="card tap">${line(title, subtitle, on, act)}${extra || ''}</div>`;
 
     return appbar('Налаштування', true)
       + `<div class="body-scroll">
@@ -1645,13 +1686,20 @@
           'Лічильник по GPS',
           'Відстань рахується сама під час поїздки — на калькуляторі ' +
             'з’являються «Почати поїздку» і «Стоп»',
-          S.gpsEnabled, 'toggleGps')}
+          S.gpsEnabled, 'toggleGps',
+          // Запасной путь подчинён счётчику: без него считать нечего
+          S.gpsEnabled ? line(
+            'Рахувати по вежах, коли зникає сигнал',
+            'Якщо супутники замовкли, відстань рахується по вежах і Wi-Fi. ' +
+              'Точність гірша, тому такі кілометри позначаються як приблизні',
+            S.coarseEnabled, 'toggleCoarse', 'subrow') : '')}
 
-        ${S.gpsEnabled ? toggle(
-          'Рахувати приблизно без супутників',
-          'Коли сигнал глушать, відстань рахується по вежах і Wi-Fi. ' +
-            'Точність гірша, тому такі кілометри позначаються як приблизні',
-          S.coarseEnabled, 'toggleCoarse') : ''}
+        ${toggle(
+          'Тільки Wi-Fi та вежі',
+          'Супутники не слухаємо зовсім. Вмикайте на час тривоги: ' +
+            'відстань рахується приблизно з першої секунди, без 20 секунд ' +
+            'очікування супутників',
+          S.networkOnly, 'toggleNetworkOnly')}
 
         ${row('Тарифи', 'Ціна за км, простій, мінімальна ціна', 'profiles')}
         ${row('Доплати за послуги', 'Діти, тварини, багаж у салоні', 'servicePrices')}
@@ -1679,7 +1727,8 @@
 
     // Со счётчиком поля заполняет он: руками их не трогаем совсем,
     // а до старта в них стоят нули, а не пустота.
-    const locked = S.gpsEnabled;
+    // Счётчик работает и по спутникам, и только по сети
+    const locked = meterEnabled();
 
     // Без тарифа считать нечего, поэтому кнопки не работают
     const noTariff = !p;
@@ -1695,9 +1744,11 @@
     // Но водитель должен видеть, что сумма приблизительная.
     const warn = !locked ? ''
       : S.meter.coarse
-        ? '<div class="coarsebar">ПРИБЛИЗНО · немає супутників, рахуємо по вежах і Wi-Fi</div>'
+        ? `<div class="coarsebar">${S.networkOnly
+            ? 'ПРИБЛИЗНО · рахуємо тільки по вежах і Wi-Fi'
+            : 'ПРИБЛИЗНО · немає супутників, рахуємо по вежах і Wi-Fi'}</div>`
         : S.jammed
-          ? '<div class="warnbar">Немає сигналу GPS — кілометри не рахуються</div>'
+          ? `<div class="warnbar" id="cWarn">${signalWarnText()}</div>`
           : '';
 
     return `<div class="appbar">
@@ -1725,7 +1776,7 @@
         ${field('cDist', 'Відстань', 'км', c.distanceText, '0.00')}
         ${field('cIdle', 'Очікування', 'хв', c.idleText, '0')}
 
-        ${S.gpsEnabled ? meterControls(st, noTariff) : ''}
+        ${meterEnabled() ? meterControls(st, noTariff) : ''}
 
         <div class="card">
           <div class="label">ДОДАТКОВІ ПОСЛУГИ</div>
@@ -1758,13 +1809,12 @@
       </div>
 
       <div class="ctrl-col">
-        ${S.gpsEnabled
+        ${meterEnabled()
           // Со счётчиком поездка сохраняется сама по «Стоп», поэтому
-          // кнопки нет вовсе — только отметка, что запись уже сделана
-          // и правки в полях дописываются в неё.
-          ? (S.lastSavedKey
-            ? `<div class="savednote">${svg('check')}<span>Збережено в статистику —
-                 відмітьте оплату, запис оновиться</span></div>`
+          // кнопки нет вовсе — только отметка, что запись уже сделана.
+          ? (S.tripSaved
+            ? `<div class="savednote">${svg('check')}<span>Поїздку збережено
+                 в статистику</span></div>`
             : '')
           : `<button class="meterbtn" style="background:var(--m-go);height:56px"
                data-act="saveTrip"${noTariff ? ' disabled' : ''}>ЗБЕРЕГТИ ПОЇЗДКУ</button>`}
@@ -1982,6 +2032,9 @@
         if (dist && dist.value !== S.calc.distanceText) dist.value = S.calc.distanceText;
         if (idle && idle.value !== S.calc.idleText) idle.value = S.calc.idleText;
         set('cSpeed', `${Math.round(S.meter.speed)} км/год`);
+        // Обратный отсчёт до перехода на вышки идёт каждую секунду,
+        // а полную перерисовку ради него делать незачем
+        set('cWarn', signalWarnText());
       }
 
       const reset = document.querySelector('.resetbtn');
@@ -2006,6 +2059,7 @@
       case 'resetCalc': A.resetCalc(); break;
       case 'toggleGps': A.toggleGps(); break;
       case 'toggleCoarse': A.toggleCoarse(); break;
+      case 'toggleNetworkOnly': A.toggleNetworkOnly(); break;
       case 'toggleJamming': A.toggleJamming(); break;
       case 'selectPayment': A.selectPayment(arg); break;
       case 'saveTrip': A.saveTrip(); break;
@@ -2104,7 +2158,7 @@
     if (cleaned !== el.value) el.value = cleaned;
 
     if (decimal) S.calc.distanceText = cleaned; else S.calc.idleText = cleaned;
-    syncLastTrip();
+
     paintLive();
   });
 

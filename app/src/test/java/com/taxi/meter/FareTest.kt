@@ -39,24 +39,23 @@ class FareTest {
     fun `сверх минимального расстояния считается по цене за км`() {
         // 60 + (10 - 2) * 15 = 180
         val fare = profile.calculateFare(distanceKm = 10.0, idleSeconds = 0)
-        assertEquals(8, fare.billedKm)
+        assertEquals(8.0, fare.billedKm, 0.001)
         assertEquals(180.0, fare.total, 0.001)
         assertTrue(!fare.minPriceApplied)
     }
 
     @Test
-    fun `начатый километр оплачивается целиком`() {
-        // Ровно на границе минимального расстояния платный километр ещё не начат
-        assertEquals(0, profile.calculateFare(2.0, 0).billedKm)
+    fun `расстояние оплачивается по факту, до метра`() {
+        // Ровно на границе минимального расстояния платных километров ещё нет
+        assertEquals(0.0, profile.calculateFare(2.0, 0).billedKm, 0.001)
         assertEquals(60.0, profile.calculateFare(2.0, 0).total, 0.001)
-        // Один метр сверх — уже третий километр целиком
-        assertEquals(1, profile.calculateFare(2.001, 0).billedKm)
-        assertEquals(75.0, profile.calculateFare(2.001, 0).total, 0.001)
-        // Весь третий километр стоит столько же
+        // Десять метров сверх — десять метров и оплачены, а не целый километр
+        assertEquals(0.01, profile.calculateFare(2.01, 0).billedKm, 0.0001)
+        assertEquals(60.15, profile.calculateFare(2.01, 0).total, 0.001)
+        // Половина километра — половина цены
+        assertEquals(67.5, profile.calculateFare(2.5, 0).total, 0.001)
         assertEquals(75.0, profile.calculateFare(3.0, 0).total, 0.001)
-        // Начало четвёртого добавляет ещё один
-        assertEquals(2, profile.calculateFare(3.01, 0).billedKm)
-        assertEquals(90.0, profile.calculateFare(3.01, 0).total, 0.001)
+        assertEquals(75.15, profile.calculateFare(3.01, 0).total, 0.001)
     }
 
     @Test
@@ -85,9 +84,9 @@ class FareTest {
         assertEquals(60.0, p.calculateFare(1.0, 0).total, 0.001)
         // 10 км * 15 = 150, порог не применяется
         assertEquals(150.0, p.calculateFare(10.0, 0).total, 0.001)
-        // 9.5 км — это десятый начатый километр
-        assertEquals(10, p.calculateFare(9.5, 0).billedKm)
-        assertEquals(150.0, p.calculateFare(9.5, 0).total, 0.001)
+        // 9.5 км — это ровно 9.5 км, а не десятый начатый километр
+        assertEquals(9.5, p.calculateFare(9.5, 0).billedKm, 0.001)
+        assertEquals(142.5, p.calculateFare(9.5, 0).total, 0.001)
     }
 
     @Test
@@ -135,11 +134,13 @@ class FareTest {
     }
 
     @Test
-    fun `погрешность double не открывает лишний километр`() {
-        // Ровное значение не должно превращаться в начатый километр
-        // из-за представления чисел с плавающей точкой
-        assertEquals(0, profile.calculateFare(2.0000000001, 0).billedKm)
-        assertEquals(1, profile.calculateFare(3.0000000001, 0).billedKm)
+    fun `итог округляется до копеек`() {
+        // Метры дают дробные копейки; водителю называть их нечем,
+        // поэтому в сумме остаются две цифры после запятой
+        // 60 + 0.1234 км * 15 = 61.851
+        val fare = profile.calculateFare(2.1234, 0)
+        assertEquals(61.85, fare.distancePart, 0.0001)
+        assertEquals(61.85, fare.total, 0.0001)
     }
 }
 

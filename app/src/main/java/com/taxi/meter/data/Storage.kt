@@ -115,21 +115,6 @@ class Storage(context: Context) {
         persistTrips(_trips.value.filterNot { it.finishedAtWallMs == finishedAtWallMs })
     }
 
-    /**
-     * Переписать запись целиком. Пока поездка остаётся на экране,
-     * правки дописываются в неё, а не плодят вторую.
-     *
-     * @return false, если записи уже нет — её могли удалить из истории.
-     */
-    fun replaceTrip(finishedAtWallMs: Long, record: TripRecord): Boolean {
-        val list = _trips.value.toMutableList()
-        val index = list.indexOfFirst { it.finishedAtWallMs == finishedAtWallMs }
-        if (index < 0) return false
-        list[index] = record
-        persistTrips(list)
-        return true
-    }
-
     private fun persistTrips(list: List<TripRecord>) {
         prefs.edit().putString(KEY_TRIPS, json.encodeToString(list)).apply()
         _trips.value = list

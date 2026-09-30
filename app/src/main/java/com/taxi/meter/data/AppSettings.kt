@@ -8,6 +8,8 @@ data class AppSettings(
     val gpsEnabled: Boolean = false,
     /** Считать грубо по вышкам и Wi-Fi, когда спутники заглушены */
     val coarseEnabled: Boolean = false,
+    /** Слушать только вышки и Wi-Fi: спутники не трогаем вовсе */
+    val networkOnly: Boolean = false,
     /** id активного профиля */
     val activeProfileId: String? = null,
     /** Доплаты за услуги — одни и те же для всех тарифов */

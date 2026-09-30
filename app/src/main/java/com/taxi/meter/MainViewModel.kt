@@ -41,12 +41,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _toast = MutableStateFlow<ToastMessage?>(null)
     val toast: StateFlow<ToastMessage?> = _toast.asStateFlow()
 
-    /** Поездка уже записана счётчиком и правки дописываются в неё. */
+    /** Последняя поездка ушла в статистику — на экране отметка об этом. */
     private val _tripSaved = MutableStateFlow(false)
     val tripSaved: StateFlow<Boolean> = _tripSaved.asStateFlow()
-
-    /** Ключ той самой записи; null — дописывать нечего. */
-    private var lastSavedKey: Long? = null
 
     /**
      * Показать выбор тарифа: каждый новый заход начинается с него.
@@ -99,9 +96,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Галочка «рахувати відстань по GPS» в настройках. */
     fun setGpsEnabled(enabled: Boolean) {
-        taxi.storage.updateSettings { it.copy(gpsEnabled = enabled) }
-        if (!enabled) stopMeter(write = false)
+        // Способы считать друг друга исключают: включили один — гасим второй
+        taxi.storage.updateSettings {
+            it.copy(gpsEnabled = enabled, networkOnly = it.networkOnly && !enabled)
+        }
+        taxi.gps.setNetworkOnly(taxi.storage.settings.value.networkOnly)
+        // Счётчик остаётся, пока включён хоть один способ считать
+        if (!meterEnabled) stopMeter(write = false)
     }
+
+    /** Счётчик есть, если разрешены спутники или сеть. */
+    private val meterEnabled: Boolean
+        get() = taxi.storage.settings.value.let { it.gpsEnabled || it.networkOnly }
 
     /** Галочка «рахувати приблизно, коли немає супутників». */
     fun setCoarseEnabled(enabled: Boolean) {
@@ -109,16 +115,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         taxi.gps.setCoarseEnabled(enabled)
     }
 
+    /** Галочка «тільки Wi-Fi та вежі»: спутники не слушаем вовсе. */
+    fun setNetworkOnly(enabled: Boolean) {
+        taxi.storage.updateSettings {
+            it.copy(networkOnly = enabled, gpsEnabled = it.gpsEnabled && !enabled)
+        }
+        taxi.gps.setNetworkOnly(enabled)
+        if (!meterEnabled) stopMeter(write = false)
+    }
+
     // --- Калькулятор -----------------------------------------------------
 
     fun setDistance(text: String) {
         _calc.value = _calc.value.copy(distanceText = text)
-        syncLastTrip()
     }
 
     fun setIdleMinutes(text: String) {
         _calc.value = _calc.value.copy(idleText = text)
-        syncLastTrip()
     }
 
     fun toggleService(service: ExtraService) {
@@ -126,12 +139,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _calc.value = _calc.value.copy(
             services = if (service in current) current - service else current + service,
         )
-        syncLastTrip()
     }
 
     fun setPayment(method: PaymentMethod?) {
         _calc.value = _calc.value.copy(payment = method)
-        syncLastTrip()
     }
 
     fun resetCalc() {
@@ -194,10 +205,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         val key = System.currentTimeMillis()
         val record = buildRecord(key, profile, input, metered)
-        lastSavedKey = key
         taxi.storage.addTrip(record)
-        _tripSaved.value = true
         _toast.value = ToastMessage("Збережено: ${String.format(Locale.US, "%.2f", record.total)} грн")
+        // Поездка закрыта: всё, что набрал водитель, уже в записи. На экране
+        // это только мешает — половина перекочевала бы в следующую поездку.
+        _calc.value = CalcInput()
+        _tripSaved.value = true
     }
 
     /**
@@ -236,25 +249,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    /**
-     * Пока запись остаётся текущей, правки дописываются в неё.
-     *
-     * Способ оплаты водитель отмечает уже после остановки, а километры
-     * иногда поправляет руками — заводить на это вторую запись незачем.
-     */
-    private fun syncLastTrip() {
-        val key = lastSavedKey ?: return
-        val profile = taxi.storage.activeProfile
-        val previous = taxi.storage.trips.value.firstOrNull { it.finishedAtWallMs == key }
-        val updated = profile != null && previous != null && taxi.storage.replaceTrip(
-            key,
-            buildRecord(key, profile, _calc.value, previous.metered),
-        )
-        if (!updated) forgetSavedTrip()
-    }
-
     private fun forgetSavedTrip() {
-        lastSavedKey = null
         _tripSaved.value = false
     }
 
@@ -280,9 +275,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return false
         }
         forgetSavedTrip()
+        // Отметку оплаты не трогаем: водитель мог поставить её заранее,
+        // а из прошлой поездки она не придёт — та обнулила калькулятор
         meterStartedAtWallMs = System.currentTimeMillis()
         taxi.meter.start()
         taxi.gps.setCoarseEnabled(taxi.storage.settings.value.coarseEnabled)
+        taxi.gps.setNetworkOnly(taxi.storage.settings.value.networkOnly)
         taxi.gps.start()
         MeterService.start(getApplication())
         pushMeterIntoCalc()
