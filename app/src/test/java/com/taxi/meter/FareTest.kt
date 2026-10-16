@@ -51,11 +51,9 @@ class FareTest {
         assertEquals(60.0, profile.calculateFare(2.0, 0).total, 0.001)
         // Десять метров сверх — десять метров и оплачены, а не целый километр
         assertEquals(0.01, profile.calculateFare(2.01, 0).billedKm, 0.0001)
-        assertEquals(60.15, profile.calculateFare(2.01, 0).total, 0.001)
         // Половина километра — половина цены
-        assertEquals(67.5, profile.calculateFare(2.5, 0).total, 0.001)
+        assertEquals(7.5, profile.calculateFare(2.5, 0).billedKm * 15, 0.001)
         assertEquals(75.0, profile.calculateFare(3.0, 0).total, 0.001)
-        assertEquals(75.15, profile.calculateFare(3.01, 0).total, 0.001)
     }
 
     @Test
@@ -86,7 +84,7 @@ class FareTest {
         assertEquals(150.0, p.calculateFare(10.0, 0).total, 0.001)
         // 9.5 км — это ровно 9.5 км, а не десятый начатый километр
         assertEquals(9.5, p.calculateFare(9.5, 0).billedKm, 0.001)
-        assertEquals(142.5, p.calculateFare(9.5, 0).total, 0.001)
+        assertEquals(142.0, p.calculateFare(9.5, 0).total, 0.001)
     }
 
     @Test
@@ -134,13 +132,25 @@ class FareTest {
     }
 
     @Test
-    fun `итог округляется до копеек`() {
-        // Метры дают дробные копейки; водителю называть их нечем,
-        // поэтому в сумме остаются две цифры после запятой
-        // 60 + 0.1234 км * 15 = 61.851
-        val fare = profile.calculateFare(2.1234, 0)
-        assertEquals(61.85, fare.distancePart, 0.0001)
-        assertEquals(61.85, fare.total, 0.0001)
+    fun `копійки в суму не потрапляють`() {
+        // Копейки набегают внутри, но в сумму попадают только тогда,
+        // когда сложились в полную гривну. Вверх не округляем никогда:
+        // 60 + 0.1234 км * 15 = 61.851 — это ещё 61 гривна
+        assertEquals(61.0, profile.calculateFare(2.1234, 0).total, 0.0001)
+        // 60 + 0.9999 км * 15 = 74.9985 — гривна ещё не набежала
+        assertEquals(74.0, profile.calculateFare(2.9999, 0).total, 0.0001)
+        // Полная гривна засчитывается ровно на границе
+        assertEquals(75.0, profile.calculateFare(3.0, 0).total, 0.0001)
+    }
+
+    @Test
+    fun `дробні ціни тарифу теж зрізаються до гривні`() {
+        // Водитель может задать цену с копейками — итог всё равно целый
+        val p = profile.copy(pricePerKm = 15.5, minPrice = 60.5)
+        // 60.5 + 1 км * 15.5 = 76.0
+        assertEquals(76.0, p.calculateFare(3.0, 0).total, 0.0001)
+        // 60.5 в пределах минимального расстояния — это 60 гривен
+        assertEquals(60.0, p.calculateFare(2.0, 0).total, 0.0001)
     }
 }
 

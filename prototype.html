@@ -809,6 +809,15 @@
 
   /* ═══ Арифметика — перенос из data/Profile.kt ═══ */
   const round2 = v => Math.round(v * 100) / 100;
+
+  /**
+   * Итог в целых гривнах: копейками с пассажиром не рассчитываются.
+   *
+   * Внутри счёт идёт непрерывно, по пройденному до метра, но наружу
+   * отдаётся только набежавшее целиком — вниз, никогда вверх. Запас
+   * 1e-9 на погрешность double: 75.999999999 — это уже 76 гривен.
+   */
+  const wholeHryvnia = v => Math.floor(v + 1e-9);
   const fmt = (v, d) => (v === null || v === undefined || !isFinite(v) ? '—' : v.toFixed(d === undefined ? 2 : d));
 
   /* Округление вверх с запасом на погрешность double: ровно 2 км
@@ -850,7 +859,7 @@
       distancePart: round2(distancePart),
       servicesPart: round2(servicesPart),
       idlePart: round2(idlePart),
-      total: round2(distancePart + idlePart),
+      total: wholeHryvnia(distancePart + idlePart),
       minPriceApplied: minApplied
     };
   }

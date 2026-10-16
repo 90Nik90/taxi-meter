@@ -3,6 +3,7 @@ package com.taxi.meter.data
 import kotlinx.serialization.Serializable
 import java.util.UUID
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 
 /**
@@ -76,6 +77,9 @@ data class Fare(
  * вместе с машиной, а не прыгает раз в километр. Простой остаётся
  * поминутным — как пошла очередная минута, она оплачивается полностью.
  *
+ * Итог — целые гривны вниз: копейки набегают внутри, но в сумму
+ * попадают только тогда, когда сложились в полную гривну.
+ *
  * Доплаты за включённые услуги прибавляются к минимальной цене поездки.
  *
  * Если задано минимальное расстояние (> 0):
@@ -125,7 +129,7 @@ fun Profile.calculateFare(
         distancePart = round2(distancePart),
         servicesPart = round2(servicesPart),
         idlePart = round2(idlePart),
-        total = round2(distancePart + idlePart),
+        total = wholeHryvnia(distancePart + idlePart),
         minPriceApplied = minApplied,
     )
 }
@@ -138,3 +142,13 @@ private fun ceilUnits(value: Double): Int =
     ceil(value - 1e-9).toInt().coerceAtLeast(0)
 
 private fun round2(v: Double): Double = Math.round(v * 100.0) / 100.0
+
+/**
+ * Итог в целых гривнах: копейками с пассажиром не рассчитываются.
+ *
+ * Внутри счёт идёт непрерывно, по пройденному до метра, но наружу
+ * отдаётся только набежавшее целиком — вниз, никогда вверх. Запас
+ * `1e-9` на погрешность double: 75.999999999 — это уже 76 гривен,
+ * а не 75.
+ */
+private fun wholeHryvnia(v: Double): Double = floor(v + 1e-9)
